@@ -8,11 +8,20 @@ import json
 import urllib.request
 import urllib.error
 import os
+import re
+import subprocess
 import sys
+from pathlib import Path
 
 ADMIN_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT = int(os.environ.get("ADMIN_PORT", 9527))
 DAEMON_API = "http://localhost:9090"
+AUTO_FILL_DIR = Path(os.environ.get("AUTO_FILL_DIR", "/opt/video-auto-fill"))
+if not AUTO_FILL_DIR.exists():
+    AUTO_FILL_DIR = Path(ADMIN_DIR).parent / "video-auto-fill"
+AUTO_FILL_PYTHON = os.environ.get("AUTO_FILL_PYTHON", str(AUTO_FILL_DIR / "venv" / "bin" / "python"))
+if not Path(AUTO_FILL_PYTHON).exists():
+    AUTO_FILL_PYTHON = sys.executable
 
 
 class AdminHandler(http.server.SimpleHTTPRequestHandler):
@@ -34,7 +43,7 @@ class AdminHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def do_OPTIONS(self):
-        if self.path.startswith("/api/daemon/"):
+        if self.path.startswith("/api/daemon/") or self.path == "/api/manual-fetch-coach":
             self.send_response(200)
             self._cors()
             self.end_headers()
@@ -50,9 +59,67 @@ class AdminHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith("/api/daemon/"):
             self._proxy_to_daemon("POST")
+        elif self.path == "/api/manual-fetch-coach":
+            self._manual_fetch_coach()
         else:
             self.send_response(405)
             self.end_headers()
+
+    def _read_json_body(self):
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except Exception:
+            return {}
+
+    def _send_json(self, status, payload):
+        self.send_response(status)
+        self._cors()
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+    def _manual_fetch_coach(self):
+        body = self._read_json_body()
+        coach_id = str(body.get("coachId", "")).strip()
+        if not re.match(r"^[A-Za-z0-9_\\-]{1,80}$", coach_id):
+            self._send_json(400, {"success": False, "error": "coachId 格式无效"})
+            return
+
+        script = AUTO_FILL_DIR / "manual_fetch_coach.py"
+        if not script.exists():
+            self._send_json(500, {"success": False, "error": f"脚本不存在: {script}"})
+            return
+
+        try:
+            result = subprocess.run(
+                [AUTO_FILL_PYTHON, str(script), "--coach-id", coach_id],
+                cwd=str(AUTO_FILL_DIR),
+                capture_output=True,
+                text=True,
+                timeout=900,
+            )
+        except subprocess.TimeoutExpired:
+            self._send_json(504, {"success": False, "error": "抓取任务超时"})
+            return
+        except Exception as e:
+            self._send_json(500, {"success": False, "error": str(e)})
+            return
+
+        output = (result.stdout or "") + "\n" + (result.stderr or "")
+        parsed = None
+        for line in output.splitlines():
+            if line.startswith("MANUAL_FETCH_RESULT="):
+                try:
+                    parsed = json.loads(line.split("=", 1)[1])
+                except Exception:
+                    parsed = None
+        if not parsed:
+            parsed = {"success": result.returncode == 0, "error": "未解析到任务结果" if result.returncode else "", "outputTail": output[-2000:]}
+        parsed["exitCode"] = result.returncode
+        parsed["outputTail"] = output[-4000:]
+        self._send_json(200 if parsed.get("success") else 500, parsed)
 
     def _proxy_to_daemon(self, method):
         url = DAEMON_API + self.path

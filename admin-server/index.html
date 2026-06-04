@@ -921,6 +921,7 @@ function renderCoaches() {
       <td>${autoFill}</td>
       <td>${links || '—'}</td>
       <td class="actions">
+        <button class="btn btn-sm btn-success" onclick="manualFetchCoach('${esc(c.id)}','${esc(c.name)}')" title="从该教练抖音主页抓取并发布 1 条新视频">抓取1条</button>
         <button class="btn btn-sm btn-primary" onclick="openCoachModal('${esc(c.id)}')">编辑</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDeleteCoach('${esc(c.id)}','${esc(c.name)}')">删除</button>
       </td>
@@ -975,8 +976,8 @@ function openCoachModal(editId) {
       <div class="form-hint">官方合作 = 已联系合作，权重最高；精选 = 你觉得不错的教练；待确认 = 尚未确认，权重最低</div>
     </div>
     <div class="form-group">
-      <label>抖音 ID</label>
-      <input id="f_douyinId" value="${c ? esc(c.douyinId || '') : ''}" placeholder="抖音账号唯一标识（用于自动匹配视频）">
+      <label>抖音号</label>
+      <input id="f_douyinId" value="${c ? esc(c.douyinId || '') : ''}" placeholder="用户主页显示的抖音号；没有拿到时可留空">
     </div>
     <div class="form-group">
       <label style="display:flex;align-items:flex-start;gap:10px;font-weight:normal;cursor:pointer;line-height:1.5">
@@ -1170,7 +1171,7 @@ async function resolveCoachSourceFromInput() {
     const coachIdEl = document.getElementById('f_coachId');
     if (coachIdEl && !coachIdEl.value.trim()) coachIdEl.value = r.suggestedCoachId || '';
     document.getElementById('f_coachName').value = r.name || '';
-    document.getElementById('f_douyinId').value = r.douyinId || r.displayName || r.secUid || '';
+    document.getElementById('f_douyinId').value = r.douyinId || r.displayName || '';
     document.getElementById('f_autoFillEnabled').checked = true;
     if (r.avatarURL) {
       document.getElementById('f_avatarURL').value = r.avatarURL;
@@ -1322,6 +1323,38 @@ async function confirmDeleteCoach(coachId, name) {
     toast('已删除');
     await loadCoaches();
   } catch (e) { toast(e.message, 'error'); }
+}
+
+async function manualFetchCoach(coachId, name) {
+  if (!confirm(`确定为「${name}」立即抓取并发布 1 条新视频？\\n\\n这会下载原视频、上传腾讯 VOD，并发布到视频广场。`)) return;
+  const buttons = Array.from(document.querySelectorAll('button'));
+  const btn = buttons.find(b => b.textContent.trim() === '抓取1条' && b.getAttribute('onclick')?.includes(coachId));
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '抓取中...';
+  }
+  try {
+    const res = await fetch('/api/manual-fetch-coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coachId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    const video = data.video || {};
+    toast(`抓取成功：${video.videoId || video.awemeId || coachId}`);
+    await loadVideos();
+  } catch (e) {
+    toast('抓取失败：' + e.message, 'error');
+    console.error('manualFetchCoach failed', e);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '抓取1条';
+    }
+  }
 }
 
 // ============================================================
