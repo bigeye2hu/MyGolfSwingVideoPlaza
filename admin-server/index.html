@@ -1039,7 +1039,7 @@ function openCoachModal(editId) {
     </div>
     <div class="form-group">
       <label>外部链接（平台主页）</label>
-      <div class="form-hint" style="margin-bottom:8px">每行：平台 + <b>主页/业务 URL</b>（自动化、跳转用）+ 可选 <b>App 展示账号</b>（用户端可见、可复制去抖音/B 站等搜索）</div>
+      <div class="form-hint" style="margin-bottom:8px">每行：平台 + <b>主页/业务 URL</b>（自动化、跳转用）+ 可选 <b>App 展示账号</b>（用户端可见；抖音请填写抖音号，拿不到时留空手填）</div>
       <div class="links-editor" id="linksEditor">${linksHtml}</div>
       <button class="btn btn-sm" style="margin-top:8px" onclick="addLinkRow()">+ 添加平台</button>
     </div>
@@ -1124,7 +1124,7 @@ function linkRowHtml(idx, platform, url, displayName) {
     <span class="link-field-hint">主页 / 业务 URL</span>
     <input class="link-url" value="${esc(url)}" placeholder="https://...（自动化、跳转用）">
     <span class="link-field-hint">App 展示账号（可选）</span>
-    <input class="link-display" value="${esc(dn)}" placeholder="用户端可见，可复制到抖音/B站等搜索">
+    <input class="link-display" value="${esc(dn)}" placeholder="抖音号 / B站账号；拿不到时留空手填">
   </div>`;
 }
 function addLinkRow() {
@@ -1179,7 +1179,7 @@ async function resolveCoachSourceFromInput() {
       updatePreviewFromUrl('avatar', r.avatarURL);
     }
     if (r.sourceURL) {
-      upsertExternalLink('douyin', r.sourceURL, r.displayName || r.douyinId || r.name || '');
+      upsertExternalLink('douyin', r.sourceURL, r.displayName || r.douyinId || '');
     }
 
     const warns = Array.isArray(r.warnings) && r.warnings.length ? `；提示：${r.warnings.join('；')}` : '';

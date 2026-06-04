@@ -1968,7 +1968,7 @@ function normalizeAuthor(author) {
     const avatarURL = Array.isArray(avatarSource.url_list) ? avatarSource.url_list[0] : (avatarSource.url || avatarSource);
     return {
         name,
-        displayName: author.unique_id || author.short_id || name,
+        displayName: author.unique_id || author.short_id || '',
         douyinId: author.unique_id || author.short_id || '',
         secUid,
         avatarURL: typeof avatarURL === 'string' ? avatarURL : '',
@@ -2040,7 +2040,7 @@ async function resolveCoachSource({ urlOrText }) {
             avatarURL: author.avatarURL,
             sourceURL: profileURL,
             displayName: author.displayName,
-            douyinId: author.douyinId || author.displayName,
+            douyinId: author.douyinId || author.displayName || '',
             secUid: resolvedSecUid,
             suggestedCoachId: slugCoachId(author, resolvedSecUid),
             confidence: author.name && (author.avatarURL || resolvedSecUid) ? 0.86 : 0.62,
