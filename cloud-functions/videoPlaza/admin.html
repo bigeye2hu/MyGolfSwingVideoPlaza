@@ -1,0 +1,1810 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 避免浏览器长期缓存整页 HTML，导致后台改版后仍看到旧表单 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>挥呗视频广场 · 管理后台</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f5f7fa; --card: #fff; --border: #e4e7ed; --text: #303133;
+  --text-secondary: #909399; --primary: #409eff; --primary-dark: #337ecc;
+  --success: #67c23a; --danger: #f56c6c; --warning: #e6a23c;
+  --radius: 8px; --shadow: 0 2px 12px rgba(0,0,0,.08);
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+a { color: var(--primary); text-decoration: none; }
+
+/* ---- Login ---- */
+.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.login-box { background: var(--card); padding: 40px; border-radius: var(--radius); box-shadow: var(--shadow); width: 360px; text-align: center; }
+.login-box h1 { font-size: 22px; margin-bottom: 8px; }
+.login-box p { color: var(--text-secondary); margin-bottom: 24px; font-size: 14px; }
+.login-box input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; margin-bottom: 16px; }
+.login-box input:focus { outline: none; border-color: var(--primary); }
+.login-box .login-err { color: var(--danger); font-size: 13px; margin-bottom: 12px; display: none; }
+
+/* ---- Buttons ---- */
+.btn { display: inline-flex; align-items: center; gap: 4px; padding: 8px 18px; border: none; border-radius: var(--radius); font-size: 14px; cursor: pointer; transition: .15s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { opacity: .85; }
+.btn-sm { padding: 4px 12px; font-size: 13px; }
+.btn-block { width: 100%; justify-content: center; padding: 12px; font-size: 15px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---- Layout ---- */
+.app { display: none; }
+.header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 10; }
+.header h1 { font-size: 18px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.admin-ui-version { font-size: 11px; font-weight: 600; color: var(--success); padding: 2px 8px; border-radius: 4px; background: #f0fdf4; border: 1px solid #bbf7d0; }
+.header .user-info { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-secondary); }
+.tabs { display: flex; gap: 0; background: var(--card); border-bottom: 1px solid var(--border); padding: 0 24px; }
+.tab-btn { padding: 12px 20px; border: none; background: none; font-size: 14px; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: .15s; }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.tab-btn:hover { color: var(--primary); }
+.content { max-width: 1600px; margin: 0 auto; padding: 24px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ---- Toolbar ---- */
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+.toolbar h2 { font-size: 16px; }
+
+/* ---- Table ---- */
+.table-wrap { overflow-x: auto; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 10px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { background: #fafafa; font-weight: 600; color: var(--text-secondary); font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #f5f7fa; }
+.cell-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.tag { display: inline-block; padding: 2px 8px; background: #ecf5ff; color: var(--primary); border-radius: 4px; font-size: 12px; }
+.cell-thumb { width: 60px; height: 40px; object-fit: cover; border-radius: 4px; background: #eee; }
+.actions { display: flex; gap: 6px; }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+.cell-title { max-width: 200px; white-space: normal; word-break: break-all; line-height: 1.4; font-size: 13px; }
+.cell-fileid { font-size: 12px; white-space: nowrap; }
+.cell-category { min-width: 140px; white-space: nowrap; }
+
+/* ---- Inline category edit ---- */
+.cat-editable { cursor: pointer; border-bottom: 1px dashed var(--text-secondary); padding-bottom: 1px; transition: .15s; }
+.cat-editable:hover { color: var(--primary); border-bottom-color: var(--primary); }
+.cat-editable .edit-icon { font-size: 11px; opacity: 0; margin-left: 4px; transition: .15s; }
+.cat-editable:hover .edit-icon { opacity: .7; }
+.cat-inline-edit { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+.cat-inline-edit select { padding: 3px 6px; font-size: 12px; border: 1px solid var(--primary); border-radius: 4px; max-width: 110px; outline: none; }
+.cat-inline-edit .btn { padding: 2px 8px; font-size: 12px; }
+.desc-cell { white-space: normal; max-width: 250px; min-width: 120px; }
+.desc-editable { cursor: pointer; color: var(--text); font-size: 13px; border-bottom: 1px dashed transparent; transition: .15s; display: inline-block; max-width: 230px; }
+.desc-editable:hover { color: var(--primary); border-bottom-color: var(--primary); }
+.desc-placeholder { color: var(--text-secondary); font-style: italic; font-size: 12px; cursor: pointer; }
+.desc-placeholder:hover { color: var(--primary); }
+.desc-inline-edit { display: flex; align-items: flex-start; gap: 4px; }
+.desc-inline-edit textarea { padding: 4px 8px; font-size: 12px; border: 1px solid var(--primary); border-radius: 4px; width: 220px; min-height: 48px; resize: vertical; font-family: inherit; outline: none; }
+.desc-inline-edit .btn { padding: 2px 8px; font-size: 12px; flex-shrink: 0; }
+
+/* ---- Batch select ---- */
+.batch-bar { display: none; align-items: center; gap: 10px; padding: 8px 14px; background: #ecf5ff; border-radius: var(--radius); margin-bottom: 12px; font-size: 14px; }
+.batch-bar.visible { display: flex; }
+.batch-bar .count { font-weight: 600; color: var(--primary); }
+th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
+
+/* ---- Health dashboard ---- */
+.health-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 16px; }
+.health-card { background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+.health-card .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.health-card .count { font-size: 28px; font-weight: 700; }
+.health-card.ok .count { color: var(--success); }
+.health-card.warn .count { color: var(--warning); }
+.health-card.error .count { color: var(--danger); }
+.health-card .detail-toggle { font-size: 12px; color: var(--primary); cursor: pointer; margin-top: 8px; display: inline-block; }
+.health-card .detail-list { font-size: 12px; color: var(--text-secondary); margin-top: 6px; max-height: 150px; overflow-y: auto; display: none; }
+.health-card .detail-list.open { display: block; }
+.health-card .detail-list div { padding: 2px 0; border-bottom: 1px solid var(--border); }
+
+/* ---- Modal ---- */
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: var(--card); border-radius: var(--radius); width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,.15); }
+.modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 16px; }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-secondary); padding: 4px; }
+.modal-body { padding: 20px; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---- Form ---- */
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+.form-group input, .form-group textarea, .form-group select {
+  width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; font-family: inherit;
+}
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--primary); }
+.form-group textarea { resize: vertical; min-height: 60px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-hint { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+/* ---- Toast ---- */
+.toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 10px 24px; border-radius: var(--radius); color: #fff; font-size: 14px; z-index: 200; animation: fadeIn .2s; }
+.toast-success { background: var(--success); }
+.toast-error { background: var(--danger); }
+@keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* ---- Image uploader ---- */
+.img-upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 16px; text-align: center; cursor: pointer; transition: .15s; position: relative; }
+.img-upload-zone:hover { border-color: var(--primary); background: #f0f7ff; }
+.img-upload-zone.uploading { pointer-events: none; opacity: .6; }
+.img-upload-zone input[type="file"] { display: none; }
+.img-upload-hint { font-size: 13px; color: var(--text-secondary); }
+.img-upload-hint .icon { font-size: 28px; display: block; margin-bottom: 6px; }
+.img-preview { max-width: 100%; max-height: 120px; border-radius: 4px; margin-bottom: 8px; object-fit: cover; }
+.img-preview.avatar { width: 80px; height: 80px; border-radius: 50%; }
+.img-preview.banner { width: 100%; height: 100px; object-fit: cover; }
+.img-upload-actions { display: flex; gap: 6px; justify-content: center; margin-top: 6px; }
+.img-upload-status { font-size: 12px; margin-top: 4px; }
+.img-upload-status.success { color: var(--success); }
+.img-upload-status.error { color: var(--danger); }
+.img-url-fallback { margin-top: 8px; }
+.img-url-fallback summary { font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.img-url-fallback input { margin-top: 4px; }
+
+/* ---- Links editor ---- */
+.links-editor { display: flex; flex-direction: column; gap: 8px; }
+/* 弹窗约 560px 宽，横排三列易被挤出视口；改为纵向堆叠，保证「展示账号」始终可见 */
+.link-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #f9fafb;
+}
+.link-row-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.link-row .link-platform {
+  max-width: 220px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+.link-row .link-field-hint { font-size: 11px; color: var(--text-secondary); }
+.link-row input.link-url,
+.link-row input.link-display {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+.link-row .btn { flex-shrink: 0; }
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+  .content { padding: 12px; }
+  .form-row { grid-template-columns: 1fr; }
+  .modal { width: 100%; border-radius: 12px 12px 0 0; max-height: 85vh; align-self: flex-end; }
+}
+</style>
+</head>
+<body>
+
+<!-- ====== Login Screen ====== -->
+<div class="login-wrap" id="loginScreen">
+  <div class="login-box">
+    <h1>🏌️ 挥呗视频广场</h1>
+    <p>管理后台</p>
+    <div class="login-err" id="loginErr">密码错误，请重试</div>
+    <input type="password" id="loginPwd" placeholder="请输入管理密码" autofocus>
+    <button class="btn btn-primary btn-block" id="loginBtn" onclick="doLogin()">登 录</button>
+  </div>
+</div>
+
+<!-- ====== Main App ====== -->
+<div class="app" id="app">
+  <div class="header">
+    <h1>🏌️ 挥呗视频广场 · 管理后台 <span class="admin-ui-version" title="若编辑教练里没有「App 展示账号」第二行输入框，说明浏览器或服务器仍是旧文件">UI v3</span></h1>
+    <div class="user-info">
+      <span>管理员</span>
+      <button class="btn btn-sm" onclick="doLogout()">退出</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="videos" onclick="switchTab('videos')">📹 视频管理</button>
+    <button class="tab-btn" data-tab="coaches" onclick="switchTab('coaches')">👨‍🏫 教练管理</button>
+    <button class="tab-btn" data-tab="categories" onclick="switchTab('categories')">📂 分类管理</button>
+    <button class="tab-btn" data-tab="health" onclick="switchTab('health');loadHealthReport()">📊 数据监控</button>
+    <button class="tab-btn" data-tab="daemon" onclick="switchTab('daemon');onDaemonTabEnter()">🤖 自动化</button>
+  </div>
+
+  <div class="content">
+    <!-- Videos -->
+    <div class="tab-panel active" id="panel-videos">
+      <div class="toolbar">
+        <h2>视频列表</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" style="background:var(--warning);color:#fff" onclick="doMigration()" id="migrateBtn">📦 数据迁移</button>
+          <button class="btn btn-sm" style="background:#8b5cf6;color:#fff" onclick="doBackfillVodFileIds()" id="backfillBtn">🔗 回填VOD FileID</button>
+          <button class="btn btn-sm" style="background:#06b6d4;color:#fff" onclick="doBatchFillCovers()" id="fillCoversBtn">🖼️ 补填封面</button>
+          <button class="btn btn-success" onclick="doRebuildSearchIndex()" id="rebuildBtn">🔄 重建搜索索引</button>
+          <button class="btn btn-primary" onclick="openVideoModal()">+ 添加视频</button>
+        </div>
+      </div>
+      <div class="batch-bar" id="batchBar">
+        <span>已选 <span class="count" id="batchCount">0</span> 项</span>
+        <button class="btn btn-sm btn-danger" onclick="doBatchDelete()">批量删除</button>
+        <button class="btn btn-sm" style="background:#eee;color:#666" onclick="clearSelection()">取消选择</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th><input type="checkbox" class="select-all" onchange="toggleSelectAll(this.checked)"></th><th>#</th><th>封面</th><th>标题</th><th>VOD FileID</th><th>来源</th><th>分类</th><th>教练</th><th>标签</th><th>添加方式</th><th>分类命中</th><th>添加日期</th><th>播放</th><th>操作</th>
+          </tr></thead>
+          <tbody id="videoTableBody"><tr><td colspan="14" class="empty-state">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Coaches -->
+    <div class="tab-panel" id="panel-coaches">
+      <div class="toolbar">
+        <h2>教练列表</h2>
+        <button class="btn btn-primary" onclick="openCoachModal()">+ 添加教练</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>头像</th><th>ID</th><th>姓名</th><th>等级</th><th>认证</th><th>自动抓取</th><th>外部链接</th><th>操作</th>
+          </tr></thead>
+          <tbody id="coachTableBody"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Categories -->
+    <div class="tab-panel" id="panel-categories">
+      <div class="toolbar">
+        <h2>分类列表（支持二级）</h2>
+        <button class="btn btn-primary" onclick="openCategoryModal(null, '')">+ 添加一级分类</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>层级</th><th>ID</th><th>名称</th><th>描述</th><th>图标</th><th>排序</th><th>操作</th>
+          </tr></thead>
+          <tbody id="categoryTableBody"><tr><td colspan="7" class="empty-state">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Health Dashboard -->
+    <div class="tab-panel" id="panel-health">
+      <div class="toolbar">
+        <h2>数据健康监控</h2>
+        <button class="btn btn-primary btn-sm" onclick="loadHealthReport()" id="healthRefreshBtn">刷新</button>
+      </div>
+      <div id="healthContent" class="empty-state">点击上方刷新按钮加载数据...</div>
+    </div>
+
+    <!-- Daemon Control -->
+    <div class="tab-panel" id="panel-daemon">
+      <div class="toolbar">
+        <h2>自动化脚本控制</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="daemonApiUrl" type="text" placeholder="Daemon API 地址" style="padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;width:240px">
+          <button class="btn btn-primary btn-sm" onclick="refreshDaemonStatus()">刷新状态</button>
+        </div>
+      </div>
+
+      <div id="daemonContent">
+        <div style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px">
+          <h3 style="font-size:15px;margin-bottom:12px">自动抓取策略（云端持久化）</h3>
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom:12px">
+              <label>每多少小时跑一轮</label>
+              <input type="number" id="autoFillIntervalHours" min="1" max="168" value="4" style="max-width:140px">
+              <div class="form-hint">1–168 小时</div>
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label>每轮最多发布几条</label>
+              <input type="number" id="autoFillVideosPerRound" min="1" max="20" value="1" style="max-width:140px">
+              <div class="form-hint">1–20 条（单轮内连续处理）</div>
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">「保存并应用到 Daemon」会先写入云端，再请求运行中脚本的 <code>/api/daemon/reload-config</code> 热加载并跳过当前等待（请填写正确的 Daemon API 地址）。</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="button" class="btn btn-primary btn-sm" onclick="saveAutoFillConfig(false)">仅保存到云端</button>
+            <button type="button" class="btn btn-success btn-sm" onclick="saveAutoFillConfig(true)">保存并应用到 Daemon</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px" id="daemonCards">
+          <div class="card" style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);text-align:center">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">运行状态</div>
+            <div id="daemon-status" style="font-size:20px;font-weight:700">-</div>
+          </div>
+          <div class="card" style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);text-align:center">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">当前轮次</div>
+            <div id="daemon-round" style="font-size:20px;font-weight:700">-</div>
+          </div>
+          <div class="card" style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);text-align:center">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">已处理</div>
+            <div id="daemon-processed" style="font-size:20px;font-weight:700">-</div>
+          </div>
+          <div class="card" style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);text-align:center">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">成功 / 失败</div>
+            <div id="daemon-results" style="font-size:20px;font-weight:700">-</div>
+          </div>
+          <div class="card" style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);text-align:center">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">运行时长</div>
+            <div id="daemon-uptime" style="font-size:20px;font-weight:700">-</div>
+          </div>
+          <div class="card" style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);text-align:center">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">下一轮</div>
+            <div id="daemon-next" style="font-size:20px;font-weight:700">-</div>
+          </div>
+          <div class="card" style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);text-align:center">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Daemon 间隔(h)</div>
+            <div id="daemon-eff-interval" style="font-size:20px;font-weight:700">-</div>
+          </div>
+          <div class="card" style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);text-align:center">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">每轮条数</div>
+            <div id="daemon-eff-batch" style="font-size:20px;font-weight:700">-</div>
+          </div>
+        </div>
+
+        <div style="background:var(--card);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px">
+          <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">当前任务</div>
+          <div id="daemon-current" style="font-size:15px">-</div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-bottom:24px">
+          <button class="btn btn-primary" onclick="triggerDaemon()" id="daemonTriggerBtn">⚡ 立即执行一轮</button>
+          <button class="btn btn-danger" onclick="stopDaemon()" id="daemonStopBtn">🛑 停止 Daemon</button>
+        </div>
+
+        <div style="background:#f8fafc;padding:16px;border-radius:var(--radius);border:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">启动命令</div>
+          <code style="display:block;background:#1e293b;color:#e2e8f0;padding:12px 16px;border-radius:6px;font-size:13px;white-space:pre-wrap">cd scripts/video-auto-fill
+python run.py --daemon</code>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">云服务器后台运行：<code style="background:#e2e8f0;padding:2px 6px;border-radius:3px;font-size:12px">nohup python run.py --daemon > /dev/null 2>&1 &</code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== Modal Container ====== -->
+<div id="modalContainer"></div>
+
+<script>
+// ============================================================
+// Config
+// ============================================================
+const API_URL = 'https://mygolfswingapp-9g2izywqa8ac3f5b-1259543736.ap-shanghai.app.tcloudbase.com/videoPlaza';
+let adminKey = '';
+
+// Cached data
+let allVideos = [];
+let allCoaches = [];
+let allCategories = [];
+
+// ============================================================
+// API Helper
+// ============================================================
+async function api(action, params = {}) {
+  const body = { action, adminKey, ...params };
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || '请求失败');
+  return data;
+}
+
+// ============================================================
+// Toast
+// ============================================================
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+// ============================================================
+// Login / Logout
+// ============================================================
+document.getElementById('loginPwd').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function doLogin() {
+  const pwd = document.getElementById('loginPwd').value.trim();
+  if (!pwd) return;
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.textContent = '验证中...';
+  try {
+    await api('adminAuth', { adminKey: pwd });
+    adminKey = pwd;
+    sessionStorage.setItem('plaza_admin_key', pwd);
+    showApp();
+  } catch {
+    document.getElementById('loginErr').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '登 录';
+  }
+}
+
+function doLogout() {
+  adminKey = '';
+  sessionStorage.removeItem('plaza_admin_key');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginPwd').value = '';
+  document.getElementById('loginErr').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadAll();
+}
+
+// 使用会话缓存恢复登录；不要在静态页面里写死管理密钥
+(function() {
+  const saved = sessionStorage.getItem('plaza_admin_key');
+  if (saved) {
+    adminKey = saved;
+    showApp();
+  } else {
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
+})();
+
+// ============================================================
+// Tab switching
+// ============================================================
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+}
+
+// ============================================================
+// Load all data
+// ============================================================
+async function loadAll() {
+  await Promise.all([loadVideos(), loadCoaches(), loadCategories()]);
+}
+
+// ============================================================
+// Videos
+// ============================================================
+async function loadVideos() {
+  try {
+    const data = await api('adminListVideos');
+    allVideos = data.videos || [];
+    renderVideos();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+let selectedVideoIds = new Set();
+
+function renderVideos() {
+  const tbody = document.getElementById('videoTableBody');
+  if (allVideos.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="14" class="empty-state">暂无视频，点击上方按钮添加</td></tr>';
+    return;
+  }
+  const SOURCE_LABELS = { official: '<span class="tag" style="background:#dbeafe;color:#2563eb">官方</span>', curated: '<span class="tag" style="background:#d1fae5;color:#059669">精选</span>', discovered: '<span class="tag" style="background:#fef3c7;color:#d97706">发现</span>' };
+  tbody.innerHTML = allVideos.map((v, idx) => {
+    const cat = allCategories.find(c => c.id === v.categoryId);
+    const parentCat = cat && cat.parentId ? allCategories.find(c => c.id === cat.parentId) : null;
+    const catDisplay = cat ? (parentCat ? `${esc(parentCat.name)} › ${esc(cat.name)}` : esc(cat.name)) : (v.categoryId ? esc(v.categoryId) : '—');
+    const coach = allCoaches.find(c => c.id === v.coachId);
+    const tags = (v.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+    const thumb = v.coverURL ? `<img class="cell-thumb" src="${esc(v.coverURL)}" alt="">` : '<span style="color:#ccc">无</span>';
+    const sourceLabel = SOURCE_LABELS[v.sourceType] || SOURCE_LABELS.curated;
+    const checked = selectedVideoIds.has(v.videoId) ? 'checked' : '';
+    return `<tr>
+      <td><input type="checkbox" class="row-check" data-id="${esc(v.videoId)}" ${checked} onchange="onRowCheck(this)"></td>
+      <td style="color:var(--text-secondary);font-size:12px">${idx + 1}</td>
+      <td>${thumb}</td>
+      <td class="cell-title">${esc(v.title)}</td>
+      <td class="cell-fileid">${v.vodFileId ? `<span title="${esc(v.vodFileId)}" style="cursor:pointer;color:var(--text-secondary)" onclick="navigator.clipboard.writeText('${esc(v.vodFileId)}');toast('已复制 FileID')">…${esc(v.vodFileId.slice(-6))} 📋</span>` : '<span style="color:#ccc">—</span>'}</td>
+      <td>${sourceLabel}</td>
+      <td class="cell-category" id="cat-cell-${esc(v.videoId)}"><span class="cat-editable" onclick="startInlineCategoryEdit('${esc(v.videoId)}')">${catDisplay}<span class="edit-icon">✏️</span></span></td>
+      <td>${coach ? esc(coach.name) : (v.coachId ? esc(v.coachId) : '—')}</td>
+      <td><div class="cell-tags">${tags}</div></td>
+      <td>${(() => {
+        const m = {'manual':{l:'手动',bg:'#e0e7ff',c:'#4338ca'},'xiaolongxia':{l:'小龙虾',bg:'#fce7f3',c:'#db2777'},'script-单链接':{l:'单链接',bg:'#dcfce7',c:'#16a34a'},'script-轮询':{l:'轮询',bg:'#fef3c7',c:'#d97706'},'script-自动化':{l:'自动化',bg:'#dbeafe',c:'#2563eb'}};
+        const k = v.addedBy || 'manual';
+        const s = m[k] || {l:k,bg:'#f3f4f6',c:'#6b7280'};
+        return `<span class="tag" style="background:${s.bg};color:${s.c}">${s.l}</span>`;
+      })()}</td>
+      <td>${(() => {
+        const m = {'hit':{l:'命中',bg:'#dcfce7',c:'#16a34a'},'created':{l:'新建',bg:'#fef3c7',c:'#d97706'},'missed':{l:'未命中',bg:'#fee2e2',c:'#dc2626'},'manual':{l:'手动',bg:'#f3f4f6',c:'#6b7280'}};
+        const k = v.classificationHit || 'manual';
+        const s = m[k] || {l:k,bg:'#f3f4f6',c:'#6b7280'};
+        return `<span class="tag" style="background:${s.bg};color:${s.c}">${s.l}</span>`;
+      })()}</td>
+      <td>${v.addedAt ? new Date(v.addedAt).toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+      <td>${v.stats?.views || 0}</td>
+      <td class="actions">
+        <button class="btn btn-sm btn-primary" onclick="openVideoModal('${esc(v.videoId)}')">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDeleteVideo('${esc(v.videoId)}','${esc(v.title)}')">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+  updateBatchBar();
+}
+
+function onRowCheck(cb) {
+  if (cb.checked) selectedVideoIds.add(cb.dataset.id);
+  else selectedVideoIds.delete(cb.dataset.id);
+  updateBatchBar();
+}
+
+function toggleSelectAll(checked) {
+  if (checked) allVideos.forEach(v => selectedVideoIds.add(v.videoId));
+  else selectedVideoIds.clear();
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+  updateBatchBar();
+}
+
+function clearSelection() {
+  selectedVideoIds.clear();
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = false);
+  const sa = document.querySelector('.select-all');
+  if (sa) sa.checked = false;
+  updateBatchBar();
+}
+
+function updateBatchBar() {
+  const bar = document.getElementById('batchBar');
+  const count = selectedVideoIds.size;
+  document.getElementById('batchCount').textContent = count;
+  bar.classList.toggle('visible', count > 0);
+}
+
+async function doBatchDelete() {
+  const ids = [...selectedVideoIds];
+  if (ids.length === 0) return;
+  if (!confirm(`确定批量删除 ${ids.length} 个视频？`)) return;
+  try {
+    await api('batchDeleteVideos', { videoIds: ids });
+    toast(`已批量删除 ${ids.length} 个视频`);
+    selectedVideoIds.clear();
+    await loadVideos();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function openVideoModal(editId) {
+  const v = editId ? allVideos.find(x => x.videoId === editId) : null;
+  const isEdit = !!v;
+  const parentCats = allCategories.filter(c => !c.parentId || c.parentId === '');
+  const editParentId = v ? (v.parentCategoryId || (allCategories.find(c => c.id === v.categoryId)?.parentId || '')) : '';
+  const parentCatOptions = `<option value="">— 选择一级分类 —</option>` + parentCats.map(c => `<option value="${esc(c.id)}" ${editParentId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+  const subCats = editParentId ? allCategories.filter(c => c.parentId === editParentId) : [];
+  const subCatOptions = `<option value="">— 选择二级分类 —</option>` + subCats.map(c => `<option value="${esc(c.id)}" ${v && v.categoryId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+  const coachOptions = `<option value="">— 无教练 —</option>` + allCoaches.map(c => {
+    const tierTag = c.tier === 'official_partner' ? ' [官方]' : c.tier === 'pending' ? ' [待确认]' : '';
+    return `<option value="${esc(c.id)}" ${v && v.coachId === c.id ? 'selected' : ''}>${esc(c.name)}${tierTag}</option>`;
+  }).join('');
+
+  showModal(isEdit ? '编辑视频' : '添加视频', `
+    <div class="form-group" style="background:#fffbeb;padding:12px;border-radius:8px;border:1px dashed #e6a23c">
+      <label style="color:#e6a23c">视频来源 *</label>
+      <select id="f_sourceType" onchange="onSourceTypeChange()">
+        <option value="official" ${v && v.sourceType === 'official' ? 'selected' : ''}>官方合作教练视频（权重100）</option>
+        <option value="curated" ${!v || v.sourceType === 'curated' || !v.sourceType ? 'selected' : ''}>精选教练视频（权重50）</option>
+        <option value="discovered" ${v && v.sourceType === 'discovered' ? 'selected' : ''}>发现的好视频（权重10）</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>抖音来源链接</label>
+      <input id="f_sourceURL" value="${v ? esc(v.sourceURL || '') : ''}" placeholder="https://www.douyin.com/video/...（原始视频链接）">
+    </div>
+    <div class="form-group" style="background:#f0f7ff;padding:12px;border-radius:8px;border:1px dashed #409eff">
+      <label style="color:#409eff">VOD FileID（自动获取元数据）</label>
+      <div style="display:flex;gap:8px">
+        <input id="f_fileId" value="${v ? esc(v.vodFileId || '') : ''}" placeholder="粘贴 VOD 控制台中的 FileID，如 514540371872..." style="flex:1">
+        <button class="btn btn-primary btn-sm" type="button" onclick="fetchVodInfo()" id="fetchVodBtn">从VOD获取</button>
+      </div>
+      <div class="form-hint">粘贴 FileID 后点击按钮，自动填充播放地址、封面、时长、分辨率</div>
+      <div id="vodFetchStatus" style="font-size:12px;margin-top:4px;display:none"></div>
+    </div>
+    <div class="form-group">
+      <label>Video ID</label>
+      <input id="f_videoId" value="${v ? esc(v.videoId) : ''}" ${isEdit ? 'readonly style="background:#f5f5f5"' : ''} placeholder="唯一标识，如 VOD_001">
+      ${isEdit ? '' : '<div class="form-hint">提交后不可修改</div>'}
+    </div>
+    <div class="form-group">
+      <label>标题 *</label>
+      <input id="f_title" value="${v ? esc(v.title) : ''}" placeholder="视频标题">
+    </div>
+    <div class="form-group">
+      <label>VOD 播放地址 *</label>
+      <input id="f_vodURL" value="${v ? esc(v.vodURL) : ''}" placeholder="https://xxx.vod2.myqcloud.com/xxx.mp4">
+    </div>
+    <div class="form-group">
+      <label>封面图 URL</label>
+      <input id="f_coverURL" value="${v ? esc(v.coverURL || '') : ''}" placeholder="https://...jpg">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label id="f_parentCategoryLabel">一级分类</label>
+        <select id="f_parentCategoryId" onchange="onParentCategoryChange()">${parentCatOptions}</select>
+      </div>
+      <div class="form-group">
+        <label id="f_categoryLabel">二级分类 *</label>
+        <select id="f_categoryId" onchange="updateTagSuggestions()">${subCatOptions}</select>
+      </div>
+      <div class="form-group">
+        <label id="f_coachLabel">教练</label>
+        <select id="f_coachId" onchange="onCoachSelect()">${coachOptions}</select>
+        <div class="form-hint" id="f_coachHint">官方合作/精选视频必须选择教练</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>时长（秒）</label>
+        <input id="f_duration" type="number" value="${v ? v.duration || '' : ''}" placeholder="300">
+      </div>
+      <div class="form-group">
+        <label>分辨率</label>
+        <input id="f_resolution" value="${v ? esc(v.resolution || '1080p') : '1080p'}" placeholder="1080p">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>描述</label>
+      <textarea id="f_description" rows="2">${v ? esc(v.description || '') : ''}</textarea>
+    </div>
+    <div class="form-group">
+      <label>标签</label>
+      <input id="f_tags" value="${v ? (v.tags || []).join(', ') : ''}" placeholder="入门, 站位, 正版授权（逗号分隔）">
+      <div id="tagSuggestions" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px"></div>
+      <div class="form-hint">点击推荐标签可快速添加，标签越完善搜索越精准</div>
+    </div>
+  `, async () => {
+    const videoId = document.getElementById('f_videoId').value.trim();
+    const title = document.getElementById('f_title').value.trim();
+    const vodURL = document.getElementById('f_vodURL').value.trim();
+    const categoryId = document.getElementById('f_categoryId').value;
+    const coachId = document.getElementById('f_coachId').value;
+    const sourceType = document.getElementById('f_sourceType').value;
+    if (!videoId || !title || !vodURL) { toast('请填写必填字段', 'error'); return; }
+    if (sourceType === 'curated' && !categoryId) { toast('精选教练视频必须选择分类', 'error'); return; }
+    if ((sourceType === 'official' || sourceType === 'curated') && !coachId) { toast('官方/精选视频必须选择教练', 'error'); return; }
+
+    const BASE_WEIGHTS = { official: 100, curated: 50, discovered: 10 };
+    const payload = {
+      videoId, title, vodURL,
+      coverURL: document.getElementById('f_coverURL').value.trim(),
+      categoryId, coachId,
+      sourceType,
+      sourceURL: document.getElementById('f_sourceURL').value.trim(),
+      baseWeight: BASE_WEIGHTS[sourceType] || 10,
+      duration: parseInt(document.getElementById('f_duration').value) || 0,
+      resolution: document.getElementById('f_resolution').value.trim() || '1080p',
+      description: document.getElementById('f_description').value.trim(),
+      tags: document.getElementById('f_tags').value.split(',').map(s => s.trim()).filter(Boolean),
+      vodFileId: document.getElementById('f_fileId').value.trim(),
+    };
+
+    try {
+      if (isEdit) {
+        await api('updateVideo', payload);
+        toast('视频已更新');
+      } else {
+        await api('addVideo', payload);
+        toast('视频已添加');
+      }
+      closeModal();
+      await loadVideos();
+    } catch (e) { toast(e.message, 'error'); }
+  });
+  updateTagSuggestions();
+  if (typeof onSourceTypeChange === 'function') onSourceTypeChange();
+}
+
+function onSourceTypeChange() {
+  const st = document.getElementById('f_sourceType')?.value;
+  const catLabel = document.getElementById('f_categoryLabel');
+  const parentCatLabel = document.getElementById('f_parentCategoryLabel');
+  const coachLabel = document.getElementById('f_coachLabel');
+  const coachHint = document.getElementById('f_coachHint');
+  if (!st) return;
+  if (st === 'official') {
+    if (parentCatLabel) parentCatLabel.textContent = '一级分类（可选）';
+    if (catLabel) catLabel.textContent = '二级分类（可选）';
+    if (coachLabel) coachLabel.textContent = '教练 *';
+    if (coachHint) coachHint.textContent = '官方合作教练必须选择';
+  } else if (st === 'curated') {
+    if (parentCatLabel) parentCatLabel.textContent = '一级分类 *';
+    if (catLabel) catLabel.textContent = '二级分类 *';
+    if (coachLabel) coachLabel.textContent = '教练 *';
+    if (coachHint) coachHint.textContent = '精选教练视频必须选择分类和教练';
+  } else {
+    if (parentCatLabel) parentCatLabel.textContent = '一级分类（建议）';
+    if (catLabel) catLabel.textContent = '二级分类（建议）';
+    if (coachLabel) coachLabel.textContent = '教练（可选）';
+    if (coachHint) coachHint.textContent = '如果能识别创作者，可选择对应教练';
+  }
+}
+
+function onParentCategoryChange() {
+  const parentId = document.getElementById('f_parentCategoryId')?.value;
+  const subSelect = document.getElementById('f_categoryId');
+  if (!subSelect) return;
+  const subs = allCategories.filter(c => c.parentId === parentId);
+  subSelect.innerHTML = '<option value="">— 选择二级分类 —</option>' + subs.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+  updateTagSuggestions();
+}
+
+function onCoachSelect() {
+  const coachId = document.getElementById('f_coachId')?.value;
+  const stSelect = document.getElementById('f_sourceType');
+  if (!coachId || !stSelect) return;
+  const coach = allCoaches.find(c => c.id === coachId);
+  if (!coach) return;
+  if (coach.tier === 'official_partner') {
+    stSelect.value = 'official';
+  } else if (coach.tier === 'pending') {
+    stSelect.value = 'discovered';
+  } else {
+    if (stSelect.value === 'official') stSelect.value = 'curated';
+  }
+  onSourceTypeChange();
+}
+
+async function confirmDeleteVideo(videoId, title) {
+  if (!confirm(`确定删除视频「${title}」？\n此操作会同时删除关联的点赞、收藏和评论数据。`)) return;
+  try {
+    await api('deleteVideo', { videoId });
+    toast('已删除');
+    await loadVideos();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ============================================================
+// Inline category edit
+// ============================================================
+function startInlineCategoryEdit(videoId) {
+  const cell = document.getElementById('cat-cell-' + videoId);
+  if (!cell) return;
+  const v = allVideos.find(x => x.videoId === videoId);
+  if (!v) return;
+
+  const currentCat = allCategories.find(c => c.id === v.categoryId);
+  const currentParentId = currentCat ? (currentCat.parentId || '') : '';
+
+  const parentCats = allCategories.filter(c => !c.parentId || c.parentId === '');
+  const parentOpts = '<option value="">— 一级 —</option>' + parentCats.map(c =>
+    `<option value="${esc(c.id)}" ${currentParentId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`
+  ).join('');
+
+  const subCats = currentParentId ? allCategories.filter(c => c.parentId === currentParentId) : [];
+  const subOpts = '<option value="">— 二级 —</option>' + subCats.map(c =>
+    `<option value="${esc(c.id)}" ${v.categoryId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`
+  ).join('');
+
+  cell.innerHTML = `<div class="cat-inline-edit">
+    <select id="inline-parent-${esc(videoId)}" onchange="onInlineParentChange('${esc(videoId)}')">${parentOpts}</select>
+    <select id="inline-sub-${esc(videoId)}">${subOpts}</select>
+    <button class="btn btn-sm btn-primary" onclick="confirmInlineCategoryEdit('${esc(videoId)}')">✓</button>
+    <button class="btn btn-sm" style="background:#eee;color:#666" onclick="cancelInlineCategoryEdit('${esc(videoId)}')">✕</button>
+  </div>`;
+
+  const subSelect = document.getElementById('inline-sub-' + videoId);
+  subSelect.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmInlineCategoryEdit(videoId); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelInlineCategoryEdit(videoId); }
+  });
+  document.getElementById('inline-parent-' + videoId).focus();
+}
+
+function onInlineParentChange(videoId) {
+  const parentId = document.getElementById('inline-parent-' + videoId)?.value;
+  const subSelect = document.getElementById('inline-sub-' + videoId);
+  if (!subSelect) return;
+  const subs = allCategories.filter(c => c.parentId === parentId);
+  subSelect.innerHTML = '<option value="">— 二级 —</option>' + subs.map(c =>
+    `<option value="${esc(c.id)}">${esc(c.name)}</option>`
+  ).join('');
+}
+
+async function confirmInlineCategoryEdit(videoId) {
+  const subSelect = document.getElementById('inline-sub-' + videoId);
+  const categoryId = subSelect?.value;
+  if (!categoryId) { toast('请选择二级分类', 'error'); return; }
+
+  const v = allVideos.find(x => x.videoId === videoId);
+  if (v && v.categoryId === categoryId) { cancelInlineCategoryEdit(videoId); return; }
+
+  const cell = document.getElementById('cat-cell-' + videoId);
+  const btns = cell.querySelectorAll('.btn');
+  btns.forEach(b => b.disabled = true);
+
+  try {
+    await api('updateVideo', { videoId, categoryId });
+    if (v) v.categoryId = categoryId;
+    restoreCatCell(videoId);
+    toast('分类已更新');
+  } catch (e) {
+    toast(e.message, 'error');
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
+function cancelInlineCategoryEdit(videoId) {
+  restoreCatCell(videoId);
+}
+
+function restoreCatCell(videoId) {
+  const cell = document.getElementById('cat-cell-' + videoId);
+  if (!cell) return;
+  const v = allVideos.find(x => x.videoId === videoId);
+  const cat = v ? allCategories.find(c => c.id === v.categoryId) : null;
+  const parentCat = cat && cat.parentId ? allCategories.find(c => c.id === cat.parentId) : null;
+  const catDisplay = cat ? (parentCat ? `${esc(parentCat.name)} › ${esc(cat.name)}` : esc(cat.name)) : (v && v.categoryId ? esc(v.categoryId) : '—');
+  cell.innerHTML = `<span class="cat-editable" onclick="startInlineCategoryEdit('${esc(videoId)}')">${catDisplay}<span class="edit-icon">✏️</span></span>`;
+}
+
+// ============================================================
+// Coaches
+// ============================================================
+async function loadCoaches() {
+  try {
+    const data = await api('adminListCoaches');
+    allCoaches = data.coaches || [];
+    renderCoaches();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function renderCoaches() {
+  const tbody = document.getElementById('coachTableBody');
+  if (allCoaches.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无教练，点击上方按钮添加</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allCoaches.map(c => {
+    const avatar = c.avatarURL ? `<img class="cell-thumb" src="${esc(c.avatarURL)}" style="width:36px;height:36px;border-radius:50%;">` : '—';
+    const links = (c.externalLinks || []).map(l => `<a href="${esc(l.url)}" target="_blank">${esc(l.platform)}</a>`).join(' · ');
+    const tierLabel = c.tier === 'official_partner' ? '<span class="tag" style="background:#dbeafe;color:#2563eb">官方合作</span>' : c.tier === 'pending' ? '<span class="tag" style="background:#f3f4f6;color:#6b7280">待确认</span>' : '<span class="tag" style="background:#d1fae5;color:#059669">精选</span>';
+    const autoFill = c.autoFillEnabled === false ? '<span class="tag" style="background:#fee2e2;color:#b91c1c">已关</span>' : '<span class="tag" style="background:#dcfce7;color:#15803d">开启</span>';
+    return `<tr>
+      <td>${avatar}</td>
+      <td>${esc(c.id)}</td>
+      <td>${esc(c.name)}</td>
+      <td>${tierLabel}</td>
+      <td>${esc(c.certification || '—')}</td>
+      <td>${autoFill}</td>
+      <td>${links || '—'}</td>
+      <td class="actions">
+        <button class="btn btn-sm btn-primary" onclick="openCoachModal('${esc(c.id)}')">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDeleteCoach('${esc(c.id)}','${esc(c.name)}')">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+const PLATFORM_OPTIONS = [
+  { value: 'douyin', label: '抖音', icon: '🎵' },
+  { value: 'bilibili', label: 'B站', icon: '📺' },
+  { value: 'youtube', label: 'YouTube', icon: '▶️' },
+  { value: 'wechat', label: '微信', icon: '💬' },
+  { value: 'xiaohongshu', label: '小红书', icon: '📕' },
+];
+
+function openCoachModal(editId) {
+  const c = editId ? allCoaches.find(x => x.id === editId) : null;
+  const isEdit = !!c;
+  const links = c ? (c.externalLinks || []) : [];
+  const badges = c ? (c.badges || []) : [];
+  const linksHtml = links.length > 0
+    ? links.map((l, i) => linkRowHtml(i, l.platform, l.url, l.displayName || '')).join('')
+    : linkRowHtml(0, '', '', '');
+
+  showModal(isEdit ? '编辑教练' : '添加教练', `
+    <div class="form-group">
+      <label>教练 ID</label>
+      <input id="f_coachId" value="${c ? esc(c.id) : ''}" ${isEdit ? 'readonly style="background:#f5f5f5"' : ''} placeholder="唯一标识，如 coach_001">
+    </div>
+    <div class="form-group">
+      <label>姓名 *</label>
+      <input id="f_coachName" value="${c ? esc(c.name) : ''}" placeholder="教练姓名">
+    </div>
+    <div class="form-group">
+      <label>教练等级 *</label>
+      <select id="f_coachTier" onchange="onCoachTierChange()">
+        <option value="official_partner" ${c && c.tier === 'official_partner' ? 'selected' : ''}>官方合作教练</option>
+        <option value="curated" ${c && c.tier === 'curated' ? 'selected' : ''}>精选教练</option>
+        <option value="pending" ${!c || c.tier === 'pending' || !c.tier ? 'selected' : ''}>待确认教练</option>
+      </select>
+      <div class="form-hint">官方合作 = 已联系合作，权重最高；精选 = 你觉得不错的教练；待确认 = 尚未确认，权重最低</div>
+    </div>
+    <div class="form-group">
+      <label>抖音 ID</label>
+      <input id="f_douyinId" value="${c ? esc(c.douyinId || '') : ''}" placeholder="抖音账号唯一标识（用于自动匹配视频）">
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:flex-start;gap:10px;font-weight:normal;cursor:pointer;line-height:1.5">
+        <input type="checkbox" id="f_autoFillEnabled" style="margin-top:4px" ${!c || c.autoFillEnabled !== false ? 'checked' : ''}>
+        <span>参与后台自动抓取脚本（关闭后仍保留教练，仅不再从抖音拉取该源）</span>
+      </label>
+    </div>
+    <div class="form-group">
+      <label>徽章</label>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:4px;font-size:14px;font-weight:normal;cursor:pointer;opacity:0.6" title="由教练等级自动控制">
+          <input type="checkbox" class="badge-check" value="official" ${badges.includes('official')?'checked':''} disabled>🏢 官方（自动）
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:14px;font-weight:normal;cursor:pointer">
+          <input type="checkbox" class="badge-check" value="certified" ${badges.includes('certified')?'checked':''}>✅ 认证教练
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:14px;font-weight:normal;cursor:pointer">
+          <input type="checkbox" class="badge-check" value="vip" ${badges.includes('vip')?'checked':''}>👑 VIP
+        </label>
+      </div>
+      <div class="form-hint">「官方」徽章由教练等级自动设置，无需手动勾选</div>
+    </div>
+    <div class="form-group">
+      <label>头像</label>
+      <div class="img-upload-zone" id="avatarUploadZone" onclick="document.getElementById('avatarFileInput').click()">
+        <input type="file" id="avatarFileInput" accept="image/*" onchange="onImageSelected(this, 'avatar', '${c ? esc(c.id) : ''}')">
+        ${c && c.avatarURL ? `<img src="${esc(c.avatarURL)}" class="img-preview avatar" id="avatarPreview">` : `<div class="img-upload-hint"><span class="icon">📷</span>点击选择头像图片<br>（建议 300×300，不超过 2MB）</div>`}
+        <div class="img-upload-status" id="avatarUploadStatus"></div>
+      </div>
+      <input type="hidden" id="f_avatarURL" value="${c ? esc(c.avatarURL || '') : ''}">
+      <details class="img-url-fallback">
+        <summary>手动填写 URL</summary>
+        <input id="f_avatarURL_manual" value="${c ? esc(c.avatarURL || '') : ''}" placeholder="https://...jpg" oninput="document.getElementById('f_avatarURL').value=this.value;updatePreviewFromUrl('avatar',this.value)">
+      </details>
+    </div>
+    <div class="form-group">
+      <label>Banner 背景图</label>
+      <div class="img-upload-zone" id="bannerUploadZone" onclick="document.getElementById('bannerFileInput').click()">
+        <input type="file" id="bannerFileInput" accept="image/*" onchange="onImageSelected(this, 'banner', '${c ? esc(c.id) : ''}')">
+        ${c && c.bannerURL ? `<img src="${esc(c.bannerURL)}" class="img-preview banner" id="bannerPreview">` : `<div class="img-upload-hint"><span class="icon">🖼️</span>点击选择背景图<br>（建议 1200×400，不超过 5MB）</div>`}
+        <div class="img-upload-status" id="bannerUploadStatus"></div>
+      </div>
+      <input type="hidden" id="f_bannerURL" value="${c ? esc(c.bannerURL || '') : ''}">
+      <details class="img-url-fallback">
+        <summary>手动填写 URL</summary>
+        <input id="f_bannerURL_manual" value="${c ? esc(c.bannerURL || '') : ''}" placeholder="https://...jpg（不填则使用默认渐变背景）" oninput="document.getElementById('f_bannerURL').value=this.value;updatePreviewFromUrl('banner',this.value)">
+      </details>
+    </div>
+    <div class="form-group">
+      <label>专业认证</label>
+      <input id="f_certification" value="${c ? esc(c.certification || '') : ''}" placeholder="如 PGA认证教练">
+    </div>
+    <div class="form-group">
+      <label>个人简介</label>
+      <textarea id="f_bio" rows="3">${c ? esc(c.bio || '') : ''}</textarea>
+    </div>
+    <div class="form-group">
+      <label>地区</label>
+      <input id="f_region" value="${c ? esc(c.region || '') : ''}" placeholder="如 广东、上海">
+    </div>
+    <div class="form-group">
+      <label>外部链接（平台主页）</label>
+      <div class="form-hint" style="margin-bottom:8px">每行：平台 + <b>主页/业务 URL</b>（自动化、跳转用）+ 可选 <b>App 展示账号</b>（用户端可见、可复制去抖音/B 站等搜索）</div>
+      <div class="links-editor" id="linksEditor">${linksHtml}</div>
+      <button class="btn btn-sm" style="margin-top:8px" onclick="addLinkRow()">+ 添加平台</button>
+    </div>
+  `, async () => {
+    const coachId = document.getElementById('f_coachId').value.trim();
+    const name = document.getElementById('f_coachName').value.trim();
+    if (!coachId || !name) { toast('请填写必填字段', 'error'); return; }
+
+    const selectedBadges = [];
+    document.querySelectorAll('.badge-check:checked').forEach(cb => selectedBadges.push(cb.value));
+    const tier = document.getElementById('f_coachTier').value;
+    if (tier === 'official_partner' && !selectedBadges.includes('official')) {
+      selectedBadges.push('official');
+    } else if (tier !== 'official_partner') {
+      const idx = selectedBadges.indexOf('official');
+      if (idx !== -1) selectedBadges.splice(idx, 1);
+    }
+
+    const linkRows = document.querySelectorAll('#linksEditor .link-row');
+    const externalLinks = [];
+    linkRows.forEach(row => {
+      const p = row.querySelector('.link-platform').value;
+      const u = row.querySelector('.link-url').value.trim();
+      const d = row.querySelector('.link-display') ? row.querySelector('.link-display').value.trim() : '';
+      if (p && u) {
+        const opt = PLATFORM_OPTIONS.find(o => o.value === p);
+        externalLinks.push({ platform: p, url: u, label: opt ? opt.label : p, displayName: d });
+      }
+    });
+
+    const payload = {
+      coachId,
+      name,
+      tier: document.getElementById('f_coachTier').value,
+      douyinId: document.getElementById('f_douyinId').value.trim(),
+      autoFillEnabled: document.getElementById('f_autoFillEnabled').checked,
+      avatarURL: document.getElementById('f_avatarURL').value.trim(),
+      bannerURL: document.getElementById('f_bannerURL').value.trim(),
+      certification: document.getElementById('f_certification').value.trim(),
+      bio: document.getElementById('f_bio').value.trim(),
+      region: document.getElementById('f_region').value.trim(),
+      externalLinks,
+      badges: selectedBadges,
+    };
+
+    try {
+      if (isEdit) {
+        await api('updateCoach', payload);
+        toast('教练已更新');
+      } else {
+        payload.id = coachId;
+        await api('addCoach', payload);
+        toast('教练已添加');
+      }
+      closeModal();
+      await loadCoaches();
+    } catch (e) { toast(e.message, 'error'); }
+  });
+  onCoachTierChange();
+}
+
+function onCoachTierChange() {
+  const tier = document.getElementById('f_coachTier').value;
+  const officialCb = document.querySelector('.badge-check[value="official"]');
+  if (!officialCb) return;
+  officialCb.checked = (tier === 'official_partner');
+}
+
+function linkRowHtml(idx, platform, url, displayName) {
+  const dn = displayName || '';
+  const options = PLATFORM_OPTIONS.map(o =>
+    `<option value="${o.value}" ${platform === o.value ? 'selected' : ''}>${o.icon} ${o.label}</option>`
+  ).join('');
+  return `<div class="link-row">
+    <div class="link-row-top">
+      <select class="link-platform">
+        <option value="">选择平台</option>
+        ${options}
+      </select>
+      <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.link-row').remove()">×</button>
+    </div>
+    <span class="link-field-hint">主页 / 业务 URL</span>
+    <input class="link-url" value="${esc(url)}" placeholder="https://...（自动化、跳转用）">
+    <span class="link-field-hint">App 展示账号（可选）</span>
+    <input class="link-display" value="${esc(dn)}" placeholder="用户端可见，可复制到抖音/B站等搜索">
+  </div>`;
+}
+function addLinkRow() {
+  const editor = document.getElementById('linksEditor');
+  editor.insertAdjacentHTML('beforeend', linkRowHtml(editor.children.length, '', '', ''));
+}
+
+// ============================================================
+// Coach Image Upload
+// ============================================================
+
+function compressImage(file, imageType) {
+  const MAX_BASE64_BYTES = 500 * 1024;
+  return new Promise((resolve) => {
+    const maxW = imageType === 'avatar' ? 300 : 1200;
+    const maxH = imageType === 'avatar' ? 300 : 500;
+
+    const img = new Image();
+    img.onload = function() {
+      let w = img.width, h = img.height;
+      if (w > maxW || h > maxH) {
+        const ratio = Math.min(maxW / w, maxH / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+
+      let quality = imageType === 'avatar' ? 0.7 : 0.6;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      while (dataUrl.length > MAX_BASE64_BYTES && quality > 0.1) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = function() {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function onImageSelected(input, imageType, coachId) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const zone = document.getElementById(imageType + 'UploadZone');
+  const statusEl = document.getElementById(imageType + 'UploadStatus');
+
+  statusEl.textContent = '压缩中...';
+  statusEl.className = 'img-upload-status';
+
+  compressImage(file, imageType).then(dataUrl => {
+    let preview = document.getElementById(imageType + 'Preview');
+    if (!preview) {
+      preview = document.createElement('img');
+      preview.id = imageType + 'Preview';
+      preview.className = 'img-preview ' + imageType;
+      const hint = zone.querySelector('.img-upload-hint');
+      if (hint) hint.replaceWith(preview);
+      else zone.prepend(preview);
+    }
+    preview.src = dataUrl;
+
+    const resolvedCoachId = coachId || document.getElementById('f_coachId').value.trim();
+    if (!resolvedCoachId) {
+      statusEl.textContent = '请先填写教练 ID，再上传图片';
+      statusEl.className = 'img-upload-status error';
+      return;
+    }
+
+    const base64Data = dataUrl.split(',')[1];
+    const base64SizeKB = Math.round(base64Data.length * 3 / 4 / 1024);
+    zone.classList.add('uploading');
+    statusEl.textContent = `上传中...（${base64SizeKB}KB）`;
+    statusEl.className = 'img-upload-status';
+
+    const uploadBody = { action: 'uploadCoachImage', adminKey, coachId: resolvedCoachId, imageBase64: base64Data, imageType: imageType, fileExt: 'jpg' };
+    fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(uploadBody)
+    }).then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      return res.json();
+    }).then(data => {
+      zone.classList.remove('uploading');
+      if (!data.success) {
+        statusEl.textContent = '上传失败: ' + (data.error || JSON.stringify(data));
+        statusEl.className = 'img-upload-status error';
+        return;
+      }
+      document.getElementById('f_' + (imageType === 'avatar' ? 'avatarURL' : 'bannerURL')).value = data.imageUrl;
+      const manualInput = document.getElementById('f_' + (imageType === 'avatar' ? 'avatarURL' : 'bannerURL') + '_manual');
+      if (manualInput) manualInput.value = data.imageUrl;
+      statusEl.textContent = '上传成功';
+      statusEl.className = 'img-upload-status success';
+    }).catch(err => {
+      zone.classList.remove('uploading');
+      statusEl.textContent = '上传失败: ' + (err.message || err);
+      statusEl.className = 'img-upload-status error';
+      console.error('Upload error:', err);
+    });
+  });
+}
+
+function updatePreviewFromUrl(imageType, url) {
+  if (!url) return;
+  let preview = document.getElementById(imageType + 'Preview');
+  const zone = document.getElementById(imageType + 'UploadZone');
+  if (!preview) {
+    preview = document.createElement('img');
+    preview.id = imageType + 'Preview';
+    preview.className = 'img-preview ' + imageType;
+    const hint = zone.querySelector('.img-upload-hint');
+    if (hint) hint.replaceWith(preview);
+    else zone.prepend(preview);
+  }
+  preview.src = url;
+}
+
+async function confirmDeleteCoach(coachId, name) {
+  if (!confirm(`确定删除教练「${name}」？`)) return;
+  try {
+    await api('deleteCoach', { coachId });
+    toast('已删除');
+    await loadCoaches();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ============================================================
+// Categories
+// ============================================================
+async function loadCategories() {
+  try {
+    const data = await api('getCategories');
+    allCategories = data.categories || [];
+    renderCategories();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function renderCategories() {
+  const tbody = document.getElementById('categoryTableBody');
+  if (allCategories.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无分类，点击上方按钮添加</td></tr>';
+    return;
+  }
+  const parents = allCategories.filter(c => !c.parentId || c.parentId === '').sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const childrenOf = (pid) => allCategories.filter(c => c.parentId === pid).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  let html = '';
+  for (const p of parents) {
+    const descHtml = p.description
+      ? `<span class="desc-editable" onclick="startInlineDescEdit('${esc(p.id)}')">${esc(p.description)}</span>`
+      : `<span class="desc-placeholder" onclick="startInlineDescEdit('${esc(p.id)}')">点击添加描述</span>`;
+    html += `<tr style="background:#f0f7ff;font-weight:600">
+      <td>📂 一级</td>
+      <td>${esc(p.id)}</td>
+      <td>${esc(p.name)}</td>
+      <td class="desc-cell" id="desc-cell-${esc(p.id)}">${descHtml}</td>
+      <td>${esc(p.icon || '—')}</td>
+      <td>${p.sortOrder ?? '—'}</td>
+      <td class="actions">
+        <button class="btn btn-sm" style="background:#10b981;color:#fff" onclick="openCategoryModal(null,'${esc(p.id)}')">+ 子分类</button>
+        <button class="btn btn-sm btn-primary" onclick="openCategoryModal('${esc(p.id)}')">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDeleteCategory('${esc(p.id)}','${esc(p.name)}')">删除</button>
+      </td>
+    </tr>`;
+    const children = childrenOf(p.id);
+    for (const child of children) {
+      html += `<tr>
+        <td style="padding-left:24px;color:#6b7280">└ 二级</td>
+        <td>${esc(child.id)}</td>
+        <td>${esc(child.name)}</td>
+        <td class="desc-cell" style="color:#aaa">—</td>
+        <td>${esc(child.icon || '—')}</td>
+        <td>${child.sortOrder ?? '—'}</td>
+        <td class="actions">
+          <button class="btn btn-sm btn-primary" onclick="openCategoryModal('${esc(child.id)}')">编辑</button>
+          <button class="btn btn-sm btn-danger" onclick="confirmDeleteCategory('${esc(child.id)}','${esc(child.name)}')">删除</button>
+        </td>
+      </tr>`;
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+function openCategoryModal(editId, parentId) {
+  const c = editId ? allCategories.find(x => x.id === editId) : null;
+  const isEdit = !!c;
+  const effectiveParentId = isEdit ? (c.parentId || '') : (parentId || '');
+  const isSubcategory = effectiveParentId !== '';
+  const parentName = isSubcategory ? (allCategories.find(x => x.id === effectiveParentId)?.name || effectiveParentId) : '';
+
+  let title = isEdit ? '编辑分类' : '添加一级分类';
+  if (!isEdit && isSubcategory) title = `添加二级分类（${parentName}）`;
+
+  showModal(title, `
+    ${isSubcategory ? `<div class="form-hint" style="margin-bottom:12px;padding:8px 12px;background:#f0f7ff;border-radius:8px">父分类：<strong>${esc(parentName)}</strong></div>` : ''}
+    <div class="form-group">
+      <label>分类 ID</label>
+      <input id="f_catId" value="${c ? esc(c.id) : ''}" ${isEdit ? 'readonly style="background:#f5f5f5"' : ''} placeholder="${isSubcategory ? '如 slice, hook' : '如 common_issues'}">
+    </div>
+    <div class="form-group">
+      <label>名称 *</label>
+      <input id="f_catName" value="${c ? esc(c.name) : ''}" placeholder="${isSubcategory ? '如 右曲球、左曲球' : '如 常见问题、挥杆姿势'}">
+    </div>
+    ${!isSubcategory ? `<div class="form-group">
+      <label>分类描述</label>
+      <textarea id="f_catDesc" rows="2" placeholder="描述该分类包含哪些内容，帮助 AI 判断视频归属">${c ? esc(c.description || '') : ''}</textarea>
+      <div class="form-hint">用于辅助 OpenClaw 大模型判断视频分类归属</div>
+    </div>` : ''}
+    <div class="form-group">
+      <label>图标（SF Symbol名）</label>
+      <input id="f_catIcon" value="${c ? esc(c.icon || '') : 'figure.golf'}" placeholder="figure.golf">
+    </div>
+    <div class="form-group">
+      <label>排序（数字越小越靠前）</label>
+      <input id="f_catSort" type="number" value="${c ? (c.sortOrder ?? '') : ''}" placeholder="0">
+    </div>
+    <input type="hidden" id="f_catParentId" value="${esc(effectiveParentId)}">
+  `, async () => {
+    const id = document.getElementById('f_catId').value.trim();
+    const name = document.getElementById('f_catName').value.trim();
+    if (!id || !name) { toast('请填写必填字段', 'error'); return; }
+
+    const descEl = document.getElementById('f_catDesc');
+    const payload = {
+      id, name,
+      icon: document.getElementById('f_catIcon').value.trim() || 'figure.golf',
+      sortOrder: parseInt(document.getElementById('f_catSort').value) || 0,
+      parentId: document.getElementById('f_catParentId').value,
+      description: descEl ? descEl.value.trim() : '',
+    };
+
+    try {
+      if (isEdit) {
+        payload.categoryId = id;
+        await api('updateCategory', payload);
+        toast('分类已更新');
+      } else {
+        await api('addCategory', payload);
+        toast('分类已添加');
+      }
+      closeModal();
+      await loadCategories();
+      renderVideos();
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
+async function confirmDeleteCategory(categoryId, name) {
+  if (!confirm(`确定删除分类「${name}」？\n注意：已关联此分类的视频不会被删除，但分类显示会异常。`)) return;
+  try {
+    await api('deleteCategory', { categoryId });
+    toast('已删除');
+    await loadCategories();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ============================================================
+// Inline description edit (categories)
+// ============================================================
+function startInlineDescEdit(categoryId) {
+  const cell = document.getElementById('desc-cell-' + categoryId);
+  if (!cell) return;
+  const cat = allCategories.find(c => c.id === categoryId);
+  if (!cat) return;
+  const currentDesc = cat.description || '';
+
+  cell.innerHTML = `<div class="desc-inline-edit">
+    <textarea id="inline-desc-${esc(categoryId)}">${esc(currentDesc)}</textarea>
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <button class="btn btn-sm btn-primary" onclick="confirmInlineDescEdit('${esc(categoryId)}')">✓</button>
+      <button class="btn btn-sm" style="background:#eee;color:#666" onclick="cancelInlineDescEdit('${esc(categoryId)}')">✕</button>
+    </div>
+  </div>`;
+
+  const ta = document.getElementById('inline-desc-' + categoryId);
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); confirmInlineDescEdit(categoryId); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelInlineDescEdit(categoryId); }
+  });
+}
+
+async function confirmInlineDescEdit(categoryId) {
+  const ta = document.getElementById('inline-desc-' + categoryId);
+  const description = ta?.value.trim() ?? '';
+  const cat = allCategories.find(c => c.id === categoryId);
+  if (cat && (cat.description || '') === description) { cancelInlineDescEdit(categoryId); return; }
+
+  const cell = document.getElementById('desc-cell-' + categoryId);
+  const btns = cell.querySelectorAll('.btn');
+  btns.forEach(b => b.disabled = true);
+
+  try {
+    await api('updateCategory', { categoryId, description });
+    if (cat) cat.description = description;
+    restoreDescCell(categoryId);
+    toast('描述已更新');
+  } catch (e) {
+    toast(e.message, 'error');
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
+function cancelInlineDescEdit(categoryId) {
+  restoreDescCell(categoryId);
+}
+
+function restoreDescCell(categoryId) {
+  const cell = document.getElementById('desc-cell-' + categoryId);
+  if (!cell) return;
+  const cat = allCategories.find(c => c.id === categoryId);
+  const desc = cat?.description || '';
+  cell.innerHTML = desc
+    ? `<span class="desc-editable" onclick="startInlineDescEdit('${esc(categoryId)}')">${esc(desc)}</span>`
+    : `<span class="desc-placeholder" onclick="startInlineDescEdit('${esc(categoryId)}')">点击添加描述</span>`;
+}
+
+// ============================================================
+// Modal helpers
+// ============================================================
+function showModal(title, bodyHtml, onConfirm) {
+  const container = document.getElementById('modalContainer');
+  container.innerHTML = `<div class="modal-mask" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>${title}</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">${bodyHtml}</div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" id="modalConfirmBtn">确定</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('modalConfirmBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('modalConfirmBtn');
+    btn.disabled = true;
+    btn.textContent = '提交中...';
+    await onConfirm();
+    btn.disabled = false;
+    btn.textContent = '确定';
+  });
+}
+
+function closeModal() {
+  document.getElementById('modalContainer').innerHTML = '';
+}
+
+// ============================================================
+// VOD 元数据自动获取
+// ============================================================
+async function fetchVodInfo() {
+  const fileId = document.getElementById('f_fileId').value.trim();
+  if (!fileId) { toast('请输入 VOD FileID', 'error'); return; }
+
+  const btn = document.getElementById('fetchVodBtn');
+  const status = document.getElementById('vodFetchStatus');
+  btn.disabled = true;
+  btn.textContent = '获取中...';
+  status.style.display = 'block';
+  status.style.color = '#909399';
+  status.textContent = '正在从 VOD 获取视频信息...';
+
+  try {
+    const data = await api('getVodMediaInfo', { fileId });
+    const info = data.mediaInfo;
+
+    if (info.vodURL) document.getElementById('f_vodURL').value = info.vodURL;
+    if (info.coverURL) document.getElementById('f_coverURL').value = info.coverURL;
+    if (info.duration) document.getElementById('f_duration').value = info.duration;
+    if (info.resolution) document.getElementById('f_resolution').value = info.resolution;
+    if (info.title && !document.getElementById('f_title').value.trim()) {
+      document.getElementById('f_title').value = info.title;
+    }
+
+    status.style.color = '#67c23a';
+    status.textContent = `获取成功：${info.resolution} · ${info.duration}秒 · 封面${info.coverURL ? '已获取' : '无'}`;
+    toast('VOD 信息已自动填充');
+  } catch (e) {
+    status.style.color = '#f56c6c';
+    status.textContent = '获取失败：' + e.message;
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '从VOD获取';
+  }
+}
+
+// ============================================================
+// 重建搜索索引
+// ============================================================
+async function doRebuildSearchIndex() {
+  if (!confirm('确定要重建所有视频的搜索索引？\n这会更新所有视频的 searchText 字段。')) return;
+  const btn = document.getElementById('rebuildBtn');
+  btn.disabled = true;
+  btn.textContent = '重建中...';
+  try {
+    const data = await api('rebuildSearchIndex');
+    toast(data.message || '搜索索引重建完成');
+  } catch (e) { toast(e.message, 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 重建搜索索引';
+  }
+}
+
+// ============================================================
+// 数据迁移
+// ============================================================
+async function doMigration() {
+  if (!confirm('确定要执行数据迁移？\n\n这会为所有现有教练添加 tier=curated, douyinId 字段\n为所有现有视频添加 sourceType=curated, sourceURL, baseWeight=50 字段\n并重新计算所有视频的 score。')) return;
+  const btn = document.getElementById('migrateBtn');
+  btn.disabled = true;
+  btn.textContent = '迁移中...';
+  try {
+    const data = await api('migrateAddNewFields');
+    toast(data.message || '数据迁移完成');
+    await loadAll();
+  } catch (e) { toast(e.message, 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.textContent = '📦 数据迁移';
+  }
+}
+
+async function doBackfillVodFileIds() {
+  if (!confirm('从腾讯 VOD 批量回填 FileID？\n\n会扫描 VOD 中所有视频文件，通过播放地址匹配后自动填入 vodFileId。')) return;
+  const btn = document.getElementById('backfillBtn');
+  btn.disabled = true;
+  btn.textContent = '回填中...';
+  try {
+    const data = await api('migrateBackfillVodFileIds');
+    toast(data.message || '回填完成');
+    await loadVideos();
+  } catch (e) { toast(e.message, 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.textContent = '🔗 回填VOD FileID';
+  }
+}
+
+async function doBatchFillCovers() {
+  if (!confirm('从 VOD 补填缺失封面？\n\n会查找所有无封面但有 FileID 的视频，从 VOD 获取封面图。')) return;
+  const btn = document.getElementById('fillCoversBtn');
+  btn.disabled = true;
+  btn.textContent = '补填中...';
+  try {
+    const data = await api('batchFillCovers');
+    toast(data.message || '补填完成');
+    await loadVideos();
+  } catch (e) { toast(e.message, 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.textContent = '🖼️ 补填封面';
+  }
+}
+
+// ============================================================
+// 标签推荐
+// ============================================================
+const TAG_SUGGESTIONS = {
+  cat_driver: ['木杆', '一号木', '开球', '发球台', '距离', '挥杆', '入门', '进阶'],
+  cat_iron: ['铁杆', '中铁', '长铁', '短铁', '击球', '触球', '弹道', '入门', '进阶'],
+  cat_chip: ['切杆', '短切', '劈起', '倒旋', '果岭边', '救球', '入门', '进阶'],
+  cat_putt: ['推杆', '果岭', '读线', '速度控制', '推杆姿势', '入门', '进阶'],
+  cat_bunker: ['沙坑', '沙坑救球', '果岭边沙坑', '球道沙坑', '入门', '进阶'],
+  cat_course: ['球场策略', '球场管理', '选杆', '风向', '码数', '下场'],
+  cat_fitness: ['体能', '柔韧性', '核心力量', '旋转', '热身', '拉伸', '防伤'],
+  _common: ['正版授权', '教学', '慢动作', '正面', '侧面', '后方视角']
+};
+
+function updateTagSuggestions() {
+  const catId = document.getElementById('f_categoryId')?.value;
+  const container = document.getElementById('tagSuggestions');
+  if (!container) return;
+
+  const suggestions = [...(TAG_SUGGESTIONS[catId] || []), ...TAG_SUGGESTIONS._common];
+  container.innerHTML = suggestions.map(tag =>
+    `<span style="display:inline-block;padding:2px 10px;background:#ecf5ff;color:#409eff;border-radius:4px;font-size:12px;cursor:pointer;border:1px solid #d9ecff" onclick="addSuggestedTag('${tag}')">${tag}</span>`
+  ).join('');
+}
+
+function addSuggestedTag(tag) {
+  const input = document.getElementById('f_tags');
+  const existing = input.value.split(',').map(s => s.trim()).filter(Boolean);
+  if (!existing.includes(tag)) {
+    existing.push(tag);
+    input.value = existing.join(', ');
+  }
+}
+
+// ============================================================
+// 数据健康监控
+// ============================================================
+async function loadHealthReport() {
+  const container = document.getElementById('healthContent');
+  container.innerHTML = '<div class="empty-state">加载中...</div>';
+  const btn = document.getElementById('healthRefreshBtn');
+  btn.disabled = true;
+  try {
+    const data = await api('getDataHealthReport');
+    const r = data.report;
+    const cards = [
+      { label: '在线视频总数', count: r.totalOnline.count, level: 'ok' },
+      { label: '无封面', count: r.noCover.count, items: r.noCover.items, level: r.noCover.count > 0 ? 'warn' : 'ok', note: r.noCover.fixable > 0 ? `其中 ${r.noCover.fixable} 个可通过「补填封面」修复` : '' },
+      { label: '无 VOD FileID', count: r.noFileId.count, items: r.noFileId.items, level: r.noFileId.count > 0 ? 'warn' : 'ok' },
+      { label: '未分类', count: r.noCategory.count, items: r.noCategory.items, level: r.noCategory.count > 0 ? 'error' : 'ok' },
+      { label: '缺教练（官方/精选）', count: r.noCoachButRequired.count, items: r.noCoachButRequired.items, level: r.noCoachButRequired.count > 0 ? 'error' : 'ok' },
+      { label: '已软删除', count: r.softDeleted.count, items: r.softDeleted.items, level: r.softDeleted.count > 0 ? 'warn' : 'ok' },
+    ];
+    container.innerHTML = '<div class="health-cards">' + cards.map((c, i) => {
+      const itemsHtml = c.items && c.items.length > 0
+        ? `<span class="detail-toggle" onclick="this.nextElementSibling.classList.toggle('open')">查看详情 ▾</span><div class="detail-list">${c.items.map(it => `<div>${esc(it.title || it.videoId)}</div>`).join('')}</div>`
+        : '';
+      const noteHtml = c.note ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px">${c.note}</div>` : '';
+      return `<div class="health-card ${c.level}"><div class="label">${c.label}</div><div class="count">${c.count}</div>${noteHtml}${itemsHtml}</div>`;
+    }).join('') + '</div>';
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state" style="color:var(--danger)">加载失败：${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
+// Util
+// ============================================================
+function esc(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+// ============================================================
+// Daemon Control
+// ============================================================
+const STATUS_LABELS = {
+  idle: '空闲 — 等待新视频',
+  sleeping: '休息中',
+  working: '工作中',
+  selecting: '选择视频中',
+  processing: '处理视频中',
+  backoff: '错误回退中',
+  stopped: '已停止',
+  starting: '启动中',
+};
+let _daemonPollTimer = null;
+
+function onDaemonTabEnter() {
+  refreshDaemonStatus();
+  loadAutoFillConfigForm();
+}
+
+async function loadAutoFillConfigForm() {
+  try {
+    const r = await api('getAutoFillConfig', {});
+    if (r.config) {
+      const elH = document.getElementById('autoFillIntervalHours');
+      const elV = document.getElementById('autoFillVideosPerRound');
+      if (elH) elH.value = r.config.publishIntervalHours;
+      if (elV) elV.value = r.config.videosPerRound;
+    }
+  } catch (e) {
+    console.warn('loadAutoFillConfigForm', e);
+  }
+}
+
+async function saveAutoFillConfig(applyDaemon) {
+  const publishIntervalHours = parseInt(document.getElementById('autoFillIntervalHours').value, 10);
+  const videosPerRound = parseInt(document.getElementById('autoFillVideosPerRound').value, 10);
+  if (!Number.isFinite(publishIntervalHours) || publishIntervalHours < 1 || publishIntervalHours > 168) {
+    toast('发布间隔须为 1–168 的整数', 'error');
+    return;
+  }
+  if (!Number.isFinite(videosPerRound) || videosPerRound < 1 || videosPerRound > 20) {
+    toast('每轮条数须为 1–20 的整数', 'error');
+    return;
+  }
+  try {
+    await api('setAutoFillConfig', { publishIntervalHours, videosPerRound });
+    toast('云端配置已保存');
+    if (applyDaemon) {
+      const base = _getDaemonUrl();
+      try {
+        const res = await fetch(base + '/api/daemon/reload-config', { method: 'POST' });
+        const d = await res.json().catch(() => ({}));
+        if (res.ok && d.success) {
+          toast(d.message || 'Daemon 已热加载');
+        } else {
+          toast('云端已保存；Daemon 热加载失败（请检查 API 地址或进程是否在跑）', 'error');
+        }
+      } catch (err) {
+        toast('云端已保存；Daemon 热加载失败: ' + err.message, 'error');
+      }
+      setTimeout(refreshDaemonStatus, 1200);
+    }
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function _getDefaultDaemonUrl() {
+  const host = location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:9090';
+  // 管理页在 9527 时，origin 会变成 :9527，但 Daemon 监听 9090
+  if (location.port === '9527') return location.protocol + '//' + location.hostname + ':9090';
+  return location.origin;
+}
+(function() {
+  const el = document.getElementById('daemonApiUrl');
+  if (el && !el.value) el.value = _getDefaultDaemonUrl();
+})();
+
+function _getDaemonUrl() {
+  return (document.getElementById('daemonApiUrl')?.value || _getDefaultDaemonUrl()).replace(/\/+$/, '');
+}
+
+function _formatUptime(seconds) {
+  if (!seconds || seconds < 0) return '-';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return h + '小时' + m + '分钟';
+  return m + '分钟';
+}
+
+async function refreshDaemonStatus() {
+  const base = _getDaemonUrl();
+  try {
+    const res = await fetch(base + '/api/daemon/status', { signal: AbortSignal.timeout(3000) });
+    const d = await res.json();
+
+    const statusEl = document.getElementById('daemon-status');
+    const label = STATUS_LABELS[d.status] || d.status;
+    const isRunning = d.running;
+    statusEl.textContent = isRunning ? '🟢 ' + label : '🔴 ' + label;
+    statusEl.style.color = isRunning ? 'var(--success)' : 'var(--danger)';
+
+    document.getElementById('daemon-round').textContent = d.round || 0;
+    document.getElementById('daemon-processed').textContent = d.total_processed || 0;
+    document.getElementById('daemon-results').innerHTML =
+      `<span style="color:var(--success)">${d.total_success || 0}</span> / <span style="color:var(--danger)">${d.total_fail || 0}</span>`;
+    document.getElementById('daemon-uptime').textContent = _formatUptime(d.uptime_seconds);
+    document.getElementById('daemon-current').textContent = d.current_video || '无';
+
+    if (d.next_round_time) {
+      const next = new Date(d.next_round_time);
+      document.getElementById('daemon-next').textContent = next.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    } else {
+      document.getElementById('daemon-next').textContent = '-';
+    }
+
+    const effI = document.getElementById('daemon-eff-interval');
+    const effB = document.getElementById('daemon-eff-batch');
+    if (effI) effI.textContent = d.publishIntervalHours != null ? String(d.publishIntervalHours) : '-';
+    if (effB) effB.textContent = d.videosPerRound != null ? String(d.videosPerRound) : '-';
+
+    document.getElementById('daemonStopBtn').disabled = !isRunning;
+
+    if (!_daemonPollTimer) {
+      _daemonPollTimer = setInterval(refreshDaemonStatus, 10000);
+    }
+  } catch (e) {
+    document.getElementById('daemon-status').textContent = '🔴 无法连接';
+    document.getElementById('daemon-status').style.color = 'var(--danger)';
+    document.getElementById('daemon-round').textContent = '-';
+    document.getElementById('daemon-processed').textContent = '-';
+    document.getElementById('daemon-results').textContent = '-';
+    document.getElementById('daemon-uptime').textContent = '-';
+    document.getElementById('daemon-current').textContent = '-';
+    document.getElementById('daemon-next').textContent = '-';
+    const effI2 = document.getElementById('daemon-eff-interval');
+    const effB2 = document.getElementById('daemon-eff-batch');
+    if (effI2) effI2.textContent = '-';
+    if (effB2) effB2.textContent = '-';
+    document.getElementById('daemonStopBtn').disabled = true;
+    if (_daemonPollTimer) { clearInterval(_daemonPollTimer); _daemonPollTimer = null; }
+  }
+}
+
+async function triggerDaemon() {
+  const base = _getDaemonUrl();
+  const btn = document.getElementById('daemonTriggerBtn');
+  btn.disabled = true;
+  btn.textContent = '触发中...';
+  try {
+    const res = await fetch(base + '/api/daemon/trigger', { method: 'POST' });
+    const d = await res.json();
+    toast(d.message || '已触发');
+    setTimeout(refreshDaemonStatus, 3000);
+  } catch (e) {
+    toast('触发失败: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ 立即执行一轮';
+  }
+}
+
+async function stopDaemon() {
+  if (!confirm('确定要停止 Daemon 吗？将在当前视频处理完后退出。')) return;
+  const base = _getDaemonUrl();
+  try {
+    const res = await fetch(base + '/api/daemon/stop', { method: 'POST' });
+    const d = await res.json();
+    toast(d.message || '停止信号已发送');
+    setTimeout(refreshDaemonStatus, 2000);
+  } catch (e) {
+    toast('发送停止信号失败: ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>

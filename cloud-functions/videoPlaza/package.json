@@ -1,0 +1,20 @@
+{
+  "name": "video-plaza",
+  "version": "1.0.0",
+  "description": "视频广场云函数 - 公共授权教学视频管理、点赞、收藏、评论",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.7.6",
+    "nodemailer": "^6.9.0"
+  },
+  "keywords": [
+    "cloudbase",
+    "video-plaza",
+    "golf"
+  ],
+  "author": "",
+  "license": "ISC"
+}

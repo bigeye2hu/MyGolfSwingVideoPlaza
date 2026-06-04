@@ -1,0 +1,29 @@
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Runtime data
+video-auto-fill/data/videos/
+video-auto-fill/data/*.json
+!video-auto-fill/data/.gitkeep
+video-auto-fill/data/run.log
+video-auto-fill/data/run.out
+
+# Local environment/secrets
+.env
+.env.*
+!.env.example
+
+# Archives and temporary files
+*.tar.gz
+*.zip
+tmp/
+dist/

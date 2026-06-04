@@ -1,0 +1,4 @@
+requests
+tencentcloud-sdk-python
+cos-python-sdk-v5
+pypinyin
