@@ -5,7 +5,7 @@ import time
 
 import requests
 
-from config import VIDEOS_DIR
+from config import DOWNLOAD_MAX_SECONDS, DOWNLOAD_READ_TIMEOUT_SECONDS, VIDEOS_DIR
 
 
 _session = requests.Session()
@@ -35,11 +35,14 @@ def download_video(video_info: dict, max_retries: int = 3) -> str | None:
     for attempt in range(1, max_retries + 1):
         try:
             print(f"  ⬇️ 下载中 (第{attempt}次)...")
-            resp = _session.get(url, stream=True, timeout=(15, 600))
+            started_at = time.monotonic()
+            resp = _session.get(url, stream=True, timeout=(15, DOWNLOAD_READ_TIMEOUT_SECONDS))
             resp.raise_for_status()
             downloaded = 0
             with open(save_path, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=65536):
+                    if time.monotonic() - started_at > DOWNLOAD_MAX_SECONDS:
+                        raise TimeoutError(f"下载超过{DOWNLOAD_MAX_SECONDS}秒，跳过该视频")
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
@@ -51,6 +54,11 @@ def download_video(video_info: dict, max_retries: int = 3) -> str | None:
             return str(save_path)
         except Exception as e:
             print(f"  ⚠️ 第{attempt}次下载失败: {e}")
+            if save_path.exists():
+                try:
+                    save_path.unlink()
+                except OSError:
+                    pass
             if attempt < max_retries:
                 wait = delay * (2 ** (attempt - 1))
                 print(f"  ⏳ {wait}秒后重试...")

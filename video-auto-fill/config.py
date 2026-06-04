@@ -52,6 +52,10 @@ LLM_API_URL = _env("LLM_API_URL", "https://api.minimaxi.com/anthropic/v1/message
 LLM_API_KEY = _env("LLM_API_KEY")
 LLM_MODEL = _env("LLM_MODEL", "MiniMax-M2.7")
 
+# ── Download guards ──
+DOWNLOAD_MAX_SECONDS = int(float(_env("DOWNLOAD_MAX_SECONDS", "300")))
+DOWNLOAD_READ_TIMEOUT_SECONDS = int(float(_env("DOWNLOAD_READ_TIMEOUT_SECONDS", "45")))
+
 # ── 运行参数 ──
 DEFAULT_DOWNLOAD_COUNT = 1
 
