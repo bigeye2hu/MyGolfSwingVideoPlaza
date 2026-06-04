@@ -19,6 +19,8 @@ def publish_to_plaza(
     tags: list[str],
     added_by: str = "manual",
     classification_hit: str = "manual",
+    quality_status: str = "standard",
+    quality_review: dict | None = None,
     max_retries: int = 3,
 ) -> bool:
     """
@@ -41,6 +43,8 @@ def publish_to_plaza(
         "tags": tags,
         "addedBy": added_by,
         "classificationHit": classification_hit,
+        "qualityStatus": quality_status if quality_status in {"premium", "standard", "hidden"} else "standard",
+        "qualityReview": quality_review or {},
     }
 
     delay = 5

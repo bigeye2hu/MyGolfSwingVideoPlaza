@@ -42,6 +42,7 @@ const COLLECTIONS = {
     REPORTS: 'plaza_reports',
     CLAIMS: 'plaza_claims',
     AUTO_FILL: 'plaza_auto_fill',
+    QUALITY_CANDIDATES: 'plaza_quality_candidates',
 };
 
 const AUTO_FILL_DOC_ID = 'config';
@@ -61,6 +62,13 @@ const TENCENT_SECRET_ID = process.env.TENCENT_SECRET_ID || VOD_SECRET_ID;
 const TENCENT_SECRET_KEY = process.env.TENCENT_SECRET_KEY || VOD_SECRET_KEY;
 const TIKHUB_TOKEN = process.env.TIKHUB_TOKEN || '';
 const TIKHUB_BASE = process.env.TIKHUB_BASE || 'https://api.tikhub.io';
+const LLM_API_URL = process.env.LLM_API_URL || 'https://api.minimaxi.com/anthropic/v1/messages';
+const LLM_API_KEY = process.env.LLM_API_KEY || '';
+const LLM_MODEL = process.env.LLM_MODEL || 'MiniMax-M2.7';
+
+const QUALITY_STATUSES = ['premium', 'standard', 'hidden'];
+const QUALITY_LABELS = { premium: '优质', standard: '普通', hidden: '隐藏' };
+const SOURCE_BASE_WEIGHTS = { official: 100, curated: 50, discovered: 10 };
 
 /**
  * 云函数入口
@@ -136,6 +144,18 @@ exports.main = async (event, context) => {
                 return await requireAdmin(restParams, getBillingDashboard);
             case 'resolveCoachSource':
                 return await requireAdmin(restParams, resolveCoachSource);
+            case 'reviewVideoQuality':
+                return await requireAdmin(restParams, reviewVideoQuality);
+            case 'reviewVideoQualityBatch':
+                return await requireAdmin(restParams, reviewVideoQualityBatch);
+            case 'applyVideoQualitySuggestion':
+                return await requireAdmin(restParams, applyVideoQualitySuggestion);
+            case 'batchUpdateVideoQuality':
+                return await requireAdmin(restParams, batchUpdateVideoQuality);
+            case 'addQualityCandidate':
+                return await requireAdmin(restParams, addQualityCandidate);
+            case 'adminListQualityCandidates':
+                return await requireAdmin(restParams, adminListQualityCandidates);
 
             // ===== 管理后台接口（需要 adminKey） =====
             case 'adminAuth':
@@ -268,6 +288,20 @@ async function getPlazaVideos({ categoryId, parentCategoryId, coachId, keyword, 
     }
 
     return { success: true, videos };
+}
+
+function normalizeQualityStatus(value) {
+    return QUALITY_STATUSES.includes(value) ? value : 'standard';
+}
+
+function baseWeightForVideo(sourceType, qualityStatus) {
+    if (qualityStatus === 'hidden') return 0;
+    const base = SOURCE_BASE_WEIGHTS[sourceType || 'curated'] || SOURCE_BASE_WEIGHTS.curated;
+    return qualityStatus === 'premium' ? base + 30 : base;
+}
+
+function authForQuality(qualityStatus) {
+    return qualityStatus !== 'hidden';
 }
 
 // ============================================================
@@ -813,12 +847,13 @@ async function addVideo(videoData) {
         return { success: false, error: '只有官方合作教练的视频才能设为"官方"来源' };
     }
 
-    const BASE_WEIGHTS = { official: 100, curated: 50, discovered: 10 };
     const coachId = videoData.coachId || '';
     const coachName = coachId ? await lookupCoachName(coachId) : '';
 
     const RESERVED_TAGS = ['官方合作', '官方', '精选', '精选教练', '官方合作教练'];
     const cleanTags = (videoData.tags || []).filter(t => !RESERVED_TAGS.includes(t));
+    const qualityStatus = normalizeQualityStatus(videoData.qualityStatus);
+    const baseWeight = baseWeightForVideo(sourceType, qualityStatus);
 
     const video = {
         videoId: videoData.videoId,
@@ -835,19 +870,21 @@ async function addVideo(videoData) {
         duration: videoData.duration || 0,
         resolution: videoData.resolution || '1080p',
         publishTime: new Date(),
-        isAuthorized: true,
+        isAuthorized: authForQuality(qualityStatus),
         sourceType,
         sourceURL: videoData.sourceURL || '',
         addedBy: videoData.addedBy || 'manual',
         addedAt: new Date(),
         classificationHit: videoData.classificationHit || 'manual',
-        baseWeight: BASE_WEIGHTS[sourceType] || 10,
+        qualityStatus,
+        qualityReview: videoData.qualityReview || null,
+        baseWeight,
         stats: {
             likes: 0,
             favorites: 0,
             comments: 0,
             views: 0,
-            score: 0
+            score: baseWeight
         },
         searchText: buildSearchText(videoData, coachName)
     };
@@ -1042,6 +1079,10 @@ async function rebuildSearchIndex() {
 // 工具函数
 // ============================================================
 
+function engagementScore(stats = {}) {
+    return (stats.likes || 0) * 1 + (stats.favorites || 0) * 3 + (stats.comments || 0) * 2;
+}
+
 // finalScore = baseWeight + engagement(likes*1 + favorites*3 + comments*2)
 async function updateScore(videoId) {
     const { data } = await db.collection(COLLECTIONS.VIDEOS)
@@ -1052,7 +1093,7 @@ async function updateScore(videoId) {
     if (data.length > 0) {
         const stats = data[0].stats || {};
         const baseWeight = data[0].baseWeight || 10;
-        const engagement = (stats.likes || 0) * 1 + (stats.favorites || 0) * 3 + (stats.comments || 0) * 2;
+        const engagement = engagementScore(stats);
         const score = baseWeight + engagement;
         await db.collection(COLLECTIONS.VIDEOS)
             .where({ videoId })
@@ -1178,15 +1219,18 @@ async function requireAdmin(params, fn) {
 // 管理后台：视频 CRUD
 // ============================================================
 
-async function adminListVideos({ limit = 100, offset = 0 }) {
+async function adminListVideos({ limit = 100, offset = 0, sourceAwemeId, qualityStatus }) {
+    const whereClause = { deleted: _.neq(true) };
+    if (sourceAwemeId) whereClause.sourceAwemeId = sourceAwemeId;
+    if (qualityStatus) whereClause.qualityStatus = normalizeQualityStatus(qualityStatus);
     const { data: videos } = await db.collection(COLLECTIONS.VIDEOS)
-        .where({ deleted: _.neq(true) })
+        .where(whereClause)
         .orderBy('publishTime', 'desc')
         .skip(offset)
         .limit(limit)
         .get();
 
-    const { total } = await db.collection(COLLECTIONS.VIDEOS).where({ deleted: _.neq(true) }).count();
+    const { total } = await db.collection(COLLECTIONS.VIDEOS).where(whereClause).count();
 
     return { success: true, videos, total };
 }
@@ -1201,7 +1245,8 @@ async function updateVideo(params) {
         'title', 'description', 'categoryId', 'coachId',
         'tags', 'coverURL', 'vodURL', 'vodFileId', 'duration',
         'resolution', 'isAuthorized', 'publishTime',
-        'sourceType', 'sourceURL', 'baseWeight'
+        'sourceType', 'sourceURL', 'baseWeight',
+        'qualityStatus', 'qualityReview'
     ];
     const updateData = {};
     for (const field of allowedFields) {
@@ -1242,6 +1287,29 @@ async function updateVideo(params) {
         }
     }
 
+    if (updateData.qualityStatus !== undefined) {
+        updateData.qualityStatus = normalizeQualityStatus(updateData.qualityStatus);
+        const { data: currentVideo } = await db.collection(COLLECTIONS.VIDEOS)
+            .where({ videoId })
+            .limit(1)
+            .get();
+        const current = currentVideo[0] || {};
+        const effectiveSource = updateData.sourceType || current.sourceType || 'curated';
+        updateData.isAuthorized = authForQuality(updateData.qualityStatus);
+        updateData.baseWeight = baseWeightForVideo(effectiveSource, updateData.qualityStatus);
+        updateData['stats.score'] = updateData.baseWeight + engagementScore(current.stats || {});
+    } else if (updateData.sourceType !== undefined) {
+        const { data: currentVideo } = await db.collection(COLLECTIONS.VIDEOS)
+            .where({ videoId })
+            .limit(1)
+            .get();
+        const current = currentVideo[0] || {};
+        const effectiveQuality = normalizeQualityStatus(current.qualityStatus);
+        updateData.baseWeight = baseWeightForVideo(updateData.sourceType, effectiveQuality);
+        updateData.isAuthorized = authForQuality(effectiveQuality);
+        updateData['stats.score'] = updateData.baseWeight + engagementScore(current.stats || {});
+    }
+
     const searchAffectingFields = ['title', 'description', 'tags', 'coachId'];
     if (searchAffectingFields.some(f => updateData[f] !== undefined)) {
         const { data: currentVideo } = await db.collection(COLLECTIONS.VIDEOS)
@@ -1275,6 +1343,287 @@ async function deleteVideo({ videoId }) {
     await db.collection(COLLECTIONS.COMMENTS).where({ videoId }).remove();
 
     return { success: true, message: '视频已标记删除，元数据已保留用于去重' };
+}
+
+// ============================================================
+// 管理后台：内容质量治理
+// ============================================================
+
+function stripCodeFence(text) {
+    return String(text || '').replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+}
+
+function compactCategoryOptions(categories) {
+    return categories
+        .filter(c => c.parentId)
+        .map(c => `${c.id}:${c.name}`)
+        .slice(0, 80)
+        .join('\n');
+}
+
+function heuristicQualityReview(video) {
+    const text = `${video.title || ''} ${video.description || ''}`;
+    const badPatterns = [
+        /直播(预告|的视频|答疑|回放)?/, /烧烤|喝酒|打枪|射击|聚会|娱乐/,
+        /防晒|面罩|帽子|好物|上新|橱窗|同款|购买|搭配/,
+        /音乐|弹唱|配色|帅气|小姐姐/
+    ];
+    const teachingPatterns = [
+        /挥杆|上杆|下杆|击球|切杆|推杆|铁杆|木杆|一号木|球位|坡度|重心|旋转|释放|练习|训练|纠正|分析|教学|技巧|方法|错误|问题/
+    ];
+    const compact = text.replace(/#[^\s#]+/g, '').trim();
+    const bad = badPatterns.some(r => r.test(text));
+    const teaching = teachingPatterns.some(r => r.test(text));
+    const tooShort = compact.length < 12;
+
+    let qualityStatus = 'standard';
+    let confidence = 0.62;
+    let reason = '高尔夫相关内容，可正常展示。';
+    if (bad || (tooShort && !teaching)) {
+        qualityStatus = 'hidden';
+        confidence = bad ? 0.86 : 0.68;
+        reason = bad ? '偏生活、直播、带货或娱乐，不适合作为练球教学视频。' : '标题/描述信息不足，暂时无法判断教学价值。';
+    } else if (teaching) {
+        qualityStatus = /分析|纠正|练习|训练|方法|技巧|问题|错误|处理/.test(text) ? 'premium' : 'standard';
+        confidence = qualityStatus === 'premium' ? 0.78 : 0.7;
+        reason = qualityStatus === 'premium' ? '包含明确技术点或练习方法。' : '有高尔夫教学相关信息。';
+    }
+
+    return {
+        qualityStatus,
+        confidence,
+        reason,
+        suggestedCategoryId: video.categoryId || '',
+        suggestedTitle: video.title || '',
+        suggestedTags: Array.isArray(video.tags) ? video.tags.slice(0, 3) : [],
+        source: 'heuristic',
+        reviewedAt: new Date().toISOString(),
+        raw: null
+    };
+}
+
+function callQualityLLM(video, categories) {
+    return new Promise((resolve) => {
+        if (!LLM_API_KEY) return resolve(null);
+        const prompt = `你是高尔夫教学内容审核助手。请按“教学价值优先”评估视频质量。
+
+质量定义：
+- premium：明确讲技术点、挥杆分析、错误纠正、练球方法、球杆/球位处理，可直接帮助用户练球。
+- standard：高尔夫相关但教学价值一般，描述可理解，能合理归类。
+- hidden：生活闲聊、直播预告/直播切片无主题、带货/防晒/配色等非训练内容、标题过短无法判断、分类只能硬凑。
+
+视频：
+标题：${video.title || ''}
+描述：${video.description || ''}
+当前分类：${video.categoryId || '无'}
+当前标签：${(video.tags || []).join(',') || '无'}
+
+可选二级分类：
+${compactCategoryOptions(categories)}
+
+只返回 JSON，不要解释：
+{"qualityStatus":"premium|standard|hidden","confidence":0.0,"reason":"20字内原因","suggestedCategoryId":"分类id或空","suggestedTitle":"建议标题或原标题","suggestedTags":["最多3个标签"]}`;
+
+        const payload = JSON.stringify({
+            model: LLM_MODEL,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.1,
+            max_tokens: 800,
+        });
+        const url = new URL(LLM_API_URL);
+        const req = https.request({
+            hostname: url.hostname,
+            path: url.pathname + url.search,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload),
+                'x-api-key': LLM_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            timeout: 30000
+        }, res => {
+            let data = '';
+            res.on('data', chunk => { data += chunk; });
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    const textItem = (json.content || []).find(item => item.type === 'text');
+                    if (!textItem) return resolve(null);
+                    const parsed = JSON.parse(stripCodeFence(textItem.text));
+                    resolve({
+                        qualityStatus: normalizeQualityStatus(parsed.qualityStatus),
+                        confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
+                        reason: String(parsed.reason || '').slice(0, 80),
+                        suggestedCategoryId: String(parsed.suggestedCategoryId || ''),
+                        suggestedTitle: String(parsed.suggestedTitle || video.title || '').slice(0, 140),
+                        suggestedTags: Array.isArray(parsed.suggestedTags) ? parsed.suggestedTags.slice(0, 3).map(String) : [],
+                        source: 'llm',
+                        reviewedAt: new Date().toISOString(),
+                        raw: parsed
+                    });
+                } catch (e) {
+                    console.warn('quality llm parse failed', e.message, data.slice(0, 200));
+                    resolve(null);
+                }
+            });
+        });
+        req.on('error', () => resolve(null));
+        req.on('timeout', () => { req.destroy(); resolve(null); });
+        req.write(payload);
+        req.end();
+    });
+}
+
+async function buildQualityReview(video) {
+    const { data: categories } = await db.collection(COLLECTIONS.CATEGORIES).limit(1000).get();
+    const review = await callQualityLLM(video, categories) || heuristicQualityReview(video);
+    if (review.suggestedCategoryId) {
+        const valid = categories.some(c => c.id === review.suggestedCategoryId && c.parentId);
+        if (!valid) review.suggestedCategoryId = video.categoryId || '';
+    }
+    if (!review.reason) review.reason = heuristicQualityReview(video).reason;
+    if (!review.suggestedTitle) review.suggestedTitle = video.title || '';
+    if (!Array.isArray(review.suggestedTags)) review.suggestedTags = Array.isArray(video.tags) ? video.tags.slice(0, 3) : [];
+    return review;
+}
+
+async function reviewVideoQuality({ videoId, dryRun = true }) {
+    if (!videoId) return { success: false, error: '缺少 videoId' };
+    const { data } = await db.collection(COLLECTIONS.VIDEOS).where({ videoId }).limit(1).get();
+    if (!data.length) return { success: false, error: '视频不存在' };
+    const review = await buildQualityReview(data[0]);
+    if (!dryRun) {
+        await db.collection(COLLECTIONS.VIDEOS).where({ videoId }).update({
+            qualityReview: review,
+            qualityReviewUpdatedAt: new Date(),
+        });
+    }
+    return { success: true, videoId, review };
+}
+
+async function reviewVideoQualityBatch({ limit = 20, offset = 0, onlyNeedsReview = false }) {
+    limit = Math.max(1, Math.min(50, parseInt(limit, 10) || 20));
+    offset = Math.max(0, parseInt(offset, 10) || 0);
+    const { data: videos } = await db.collection(COLLECTIONS.VIDEOS)
+        .where({ deleted: _.neq(true) })
+        .orderBy('publishTime', 'desc')
+        .skip(offset)
+        .limit(limit)
+        .get();
+    const results = [];
+    for (const video of videos) {
+        if (onlyNeedsReview && video.qualityReview && video.qualityStatus) continue;
+        const review = await buildQualityReview(video);
+        await db.collection(COLLECTIONS.VIDEOS).where({ videoId: video.videoId }).update({
+            qualityReview: review,
+            qualityStatus: normalizeQualityStatus(video.qualityStatus),
+            qualityReviewUpdatedAt: new Date(),
+        });
+        results.push({ videoId: video.videoId, title: video.title, currentQualityStatus: normalizeQualityStatus(video.qualityStatus), review });
+    }
+    return { success: true, reviewed: results.length, results };
+}
+
+async function applyVideoQualitySuggestion({ videoId, applyText = true, applyCategory = true, applyTags = true }) {
+    if (!videoId) return { success: false, error: '缺少 videoId' };
+    const { data } = await db.collection(COLLECTIONS.VIDEOS).where({ videoId }).limit(1).get();
+    if (!data.length) return { success: false, error: '视频不存在' };
+    const video = data[0];
+    const review = video.qualityReview || await buildQualityReview(video);
+    const qualityStatus = normalizeQualityStatus(review.qualityStatus);
+    const baseWeight = baseWeightForVideo(video.sourceType, qualityStatus);
+    const updates = {
+        qualityStatus,
+        qualityReview: review,
+        isAuthorized: authForQuality(qualityStatus),
+        baseWeight,
+        'stats.score': baseWeight + engagementScore(video.stats || {}),
+        qualityAppliedAt: new Date(),
+    };
+    if (applyText && review.suggestedTitle) updates.title = review.suggestedTitle;
+    if (applyCategory && review.suggestedCategoryId) {
+        const { data: catCheck } = await db.collection(COLLECTIONS.CATEGORIES).where({ id: review.suggestedCategoryId }).limit(1).get();
+        if (catCheck.length && catCheck[0].parentId) {
+            updates.categoryId = review.suggestedCategoryId;
+            updates.parentCategoryId = catCheck[0].parentId;
+        }
+    }
+    if (applyTags && Array.isArray(review.suggestedTags)) updates.tags = review.suggestedTags.slice(0, 3);
+    const coachName = await lookupCoachName(video.coachId);
+    updates.searchText = buildSearchText({ ...video, ...updates }, coachName);
+    await db.collection(COLLECTIONS.VIDEOS).where({ videoId }).update(updates);
+    return { success: true, videoId, updates };
+}
+
+async function batchUpdateVideoQuality({ videoIds, qualityStatus }) {
+    if (!Array.isArray(videoIds) || videoIds.length === 0) return { success: false, error: '缺少 videoIds 数组' };
+    qualityStatus = normalizeQualityStatus(qualityStatus);
+    let updated = 0;
+    for (const videoId of videoIds) {
+        const { data } = await db.collection(COLLECTIONS.VIDEOS).where({ videoId }).limit(1).get();
+        if (!data.length) continue;
+        const video = data[0];
+        const baseWeight = baseWeightForVideo(video.sourceType, qualityStatus);
+        await db.collection(COLLECTIONS.VIDEOS).where({ videoId }).update({
+            qualityStatus,
+            isAuthorized: authForQuality(qualityStatus),
+            baseWeight,
+            'stats.score': baseWeight + engagementScore(video.stats || {}),
+            qualityManualUpdatedAt: new Date(),
+        });
+        updated++;
+    }
+    return { success: true, updated };
+}
+
+async function addQualityCandidate(candidate) {
+    const awemeId = candidate.awemeId || candidate.sourceAwemeId;
+    if (!awemeId) return { success: false, error: '缺少 awemeId' };
+    try {
+        await db.createCollection(COLLECTIONS.QUALITY_CANDIDATES);
+    } catch (e) {
+        if (e.code !== 'DATABASE_COLLECTION_EXIST') {
+            console.warn('create quality candidates collection failed', e.message);
+        }
+    }
+    const { data: dup } = await db.collection(COLLECTIONS.QUALITY_CANDIDATES)
+        .where({ awemeId }).limit(1).get();
+    const doc = {
+        awemeId,
+        coachId: candidate.coachId || '',
+        coachName: candidate.coachName || '',
+        title: candidate.title || '',
+        coverURL: candidate.coverURL || '',
+        sourceURL: candidate.sourceURL || '',
+        qualityReview: candidate.qualityReview || null,
+        status: candidate.status || 'rejected',
+        updatedAt: new Date(),
+    };
+    if (dup.length) {
+        await db.collection(COLLECTIONS.QUALITY_CANDIDATES).where({ awemeId }).update(doc);
+        return { success: true, updated: true };
+    }
+    await db.collection(COLLECTIONS.QUALITY_CANDIDATES).add({ ...doc, createdAt: new Date() });
+    return { success: true, candidate: doc };
+}
+
+async function adminListQualityCandidates({ limit = 100, offset = 0 }) {
+    limit = Math.max(1, Math.min(200, parseInt(limit, 10) || 100));
+    offset = Math.max(0, parseInt(offset, 10) || 0);
+    try {
+        const { data: candidates } = await db.collection(COLLECTIONS.QUALITY_CANDIDATES)
+            .orderBy('createdAt', 'desc')
+            .skip(offset)
+            .limit(limit)
+            .get();
+        return { success: true, candidates };
+    } catch (e) {
+        if (e.code === 'DATABASE_COLLECTION_NOT_EXIST' || String(e.message || '').includes('Db or Table not exist')) {
+            return { success: true, candidates: [] };
+        }
+        throw e;
+    }
 }
 
 // ============================================================
@@ -2244,10 +2593,9 @@ async function uploadVideo(params) {
 // 数据迁移：为现有数据补充新字段默认值
 // ============================================================
 
-async function migrateAddNewFields() {
+async function migrateAddNewFields({ videoLimit = 100, videoOffset = 0 } = {}) {
     const RESERVED_TAGS = ['官方合作', '官方', '精选', '精选教练', '官方合作教练'];
-    const BASE_WEIGHTS = { official: 100, curated: 50, discovered: 10 };
-    const log = { coaches: 0, videos: 0, invalidCategories: 0, cleanedTags: 0, fixedSourceType: 0 };
+    const log = { coaches: 0, videos: 0, invalidCategories: 0, cleanedTags: 0, fixedSourceType: 0, qualityDefaults: 0 };
 
     const { data: categories } = await db.collection(COLLECTIONS.CATEGORIES).limit(500).get();
     const validCategoryIds = new Set(categories.map(c => c.id));
@@ -2287,7 +2635,12 @@ async function migrateAddNewFields() {
         }
     }
 
-    const { data: videos } = await db.collection(COLLECTIONS.VIDEOS).limit(500).get();
+    videoLimit = Math.max(1, Math.min(100, parseInt(videoLimit, 10) || 100));
+    videoOffset = Math.max(0, parseInt(videoOffset, 10) || 0);
+    const { data: videos } = await db.collection(COLLECTIONS.VIDEOS)
+        .skip(videoOffset)
+        .limit(videoLimit)
+        .get();
     for (const video of videos) {
         const updates = {};
 
@@ -2297,26 +2650,36 @@ async function migrateAddNewFields() {
         if (coachTier === 'official_partner') {
             if (video.sourceType !== 'official') {
                 updates.sourceType = 'official';
-                updates.baseWeight = BASE_WEIGHTS.official;
+                updates.baseWeight = baseWeightForVideo('official', normalizeQualityStatus(video.qualityStatus));
                 log.fixedSourceType++;
             }
         } else if (coachTier === 'pending') {
             if (video.sourceType !== 'discovered') {
                 updates.sourceType = 'discovered';
-                updates.baseWeight = BASE_WEIGHTS.discovered;
+                updates.baseWeight = baseWeightForVideo('discovered', normalizeQualityStatus(video.qualityStatus));
                 log.fixedSourceType++;
             }
         } else if (coachTier === 'curated') {
             if (video.sourceType === 'official') {
                 updates.sourceType = 'curated';
-                updates.baseWeight = BASE_WEIGHTS.curated;
+                updates.baseWeight = baseWeightForVideo('curated', normalizeQualityStatus(video.qualityStatus));
                 log.fixedSourceType++;
             }
         }
         if (!video.sourceType && !updates.sourceType) updates.sourceType = 'curated';
         if (!video.sourceURL && video.sourceURL !== '') updates.sourceURL = '';
-        if (!video.baseWeight && video.baseWeight !== 0 && !updates.baseWeight) {
-            updates.baseWeight = BASE_WEIGHTS[updates.sourceType || video.sourceType || 'curated'] || 50;
+        if (!video.qualityStatus) {
+            updates.qualityStatus = 'standard';
+            log.qualityDefaults++;
+        }
+        const effectiveQuality = normalizeQualityStatus(updates.qualityStatus || video.qualityStatus);
+        const effectiveSourceForWeight = updates.sourceType || video.sourceType || 'curated';
+        const expectedBaseWeight = baseWeightForVideo(effectiveSourceForWeight, effectiveQuality);
+        if (video.baseWeight !== expectedBaseWeight || updates.baseWeight !== undefined) {
+            updates.baseWeight = expectedBaseWeight;
+        }
+        if (video.isAuthorized === undefined || video.isAuthorized !== authForQuality(effectiveQuality)) {
+            updates.isAuthorized = authForQuality(effectiveQuality);
         }
 
         if (video.categoryId && !validCategoryIds.has(video.categoryId)) {
@@ -2347,12 +2710,10 @@ async function migrateAddNewFields() {
             await db.collection(COLLECTIONS.VIDEOS).where({ videoId: video.videoId }).update(updates);
             log.videos++;
 
-            const finalSourceType = updates.sourceType || video.sourceType || 'curated';
-            const finalBaseWeight = updates.baseWeight || video.baseWeight || BASE_WEIGHTS[finalSourceType];
+            const finalBaseWeight = updates.baseWeight !== undefined ? updates.baseWeight : video.baseWeight;
             const stats = video.stats || {};
-            const engagement = (stats.likes || 0) * 1 + (stats.favorites || 0) * 3 + (stats.comments || 0) * 2;
             await db.collection(COLLECTIONS.VIDEOS).where({ videoId: video.videoId }).update({
-                'stats.score': finalBaseWeight + engagement
+                'stats.score': finalBaseWeight + engagementScore(stats)
             });
         }
     }
@@ -2364,8 +2725,11 @@ async function migrateAddNewFields() {
             fixedSourceType: log.fixedSourceType,
             invalidCategoriesCleared: log.invalidCategories,
             reservedTagsCleaned: log.cleanedTags,
-            categoriesFixedParentId: log.categoriesFixed || 0
-        }
+            categoriesFixedParentId: log.categoriesFixed || 0,
+            qualityDefaults: log.qualityDefaults
+        },
+        videoLimit,
+        videoOffset
     };
 }
 

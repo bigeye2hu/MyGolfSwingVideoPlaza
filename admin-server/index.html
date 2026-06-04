@@ -202,6 +202,19 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
   font-size: 14px;
 }
 .link-row .btn { flex-shrink: 0; }
+.quality-pill { display:inline-block; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600; white-space:nowrap; }
+.quality-premium { background:#fef3c7; color:#b45309; }
+.quality-standard { background:#e0f2fe; color:#0369a1; }
+.quality-hidden { background:#fee2e2; color:#b91c1c; }
+.filter-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+.filter-row select, .filter-row input { padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; }
+.governance-grid { display:grid; gap:16px; }
+.review-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
+.review-meta { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; color:var(--text-secondary); font-size:12px; }
+.review-title { font-weight:600; margin-bottom:6px; }
+.review-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.candidate-row { padding:10px 0; border-bottom:1px solid var(--border); }
+.candidate-row:last-child { border-bottom:0; }
 
 /* ---- Responsive ---- */
 @media (max-width: 640px) {
@@ -228,7 +241,7 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
 <!-- ====== Main App ====== -->
 <div class="app" id="app">
   <div class="header">
-    <h1>🏌️ 挥呗视频广场 · 管理后台 <span class="admin-ui-version" title="若看不到「费用监控」，说明浏览器仍是缓存旧文件">UI v4</span></h1>
+    <h1>🏌️ 挥呗视频广场 · 管理后台 <span class="admin-ui-version" title="若看不到「内容治理」，说明浏览器仍是缓存旧文件">UI v5</span></h1>
     <div class="user-info">
       <span>管理员</span>
       <button class="btn btn-sm" onclick="doLogout()">退出</button>
@@ -239,6 +252,7 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
     <button class="tab-btn active" data-tab="videos" onclick="switchTab('videos')">📹 视频管理</button>
     <button class="tab-btn" data-tab="coaches" onclick="switchTab('coaches')">👨‍🏫 教练管理</button>
     <button class="tab-btn" data-tab="categories" onclick="switchTab('categories')">📂 分类管理</button>
+    <button class="tab-btn" data-tab="governance" onclick="switchTab('governance');loadGovernance()">✨ 内容治理</button>
     <button class="tab-btn" data-tab="billing" onclick="switchTab('billing');loadBillingDashboard()">💰 费用监控</button>
     <button class="tab-btn" data-tab="health" onclick="switchTab('health');loadHealthReport()">📊 数据监控</button>
     <button class="tab-btn" data-tab="daemon" onclick="switchTab('daemon');onDaemonTabEnter()">🤖 自动化</button>
@@ -259,16 +273,51 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
       </div>
       <div class="batch-bar" id="batchBar">
         <span>已选 <span class="count" id="batchCount">0</span> 项</span>
+        <button class="btn btn-sm" style="background:#f59e0b;color:#fff" onclick="doBatchQuality('premium')">设为优质</button>
+        <button class="btn btn-sm" style="background:#0ea5e9;color:#fff" onclick="doBatchQuality('standard')">设为普通</button>
+        <button class="btn btn-sm" style="background:#ef4444;color:#fff" onclick="doBatchQuality('hidden')">设为隐藏</button>
         <button class="btn btn-sm btn-danger" onclick="doBatchDelete()">批量删除</button>
         <button class="btn btn-sm" style="background:#eee;color:#666" onclick="clearSelection()">取消选择</button>
+      </div>
+      <div class="filter-row">
+        <span style="font-size:13px;color:var(--text-secondary)">质量筛选</span>
+        <select id="videoQualityFilter" onchange="renderVideos()">
+          <option value="">全部质量</option>
+          <option value="premium">优质</option>
+          <option value="standard">普通</option>
+          <option value="hidden">隐藏</option>
+          <option value="unreviewed">未评估</option>
+        </select>
+        <input id="videoKeywordFilter" placeholder="按标题搜索" oninput="renderVideos()">
       </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th><input type="checkbox" class="select-all" onchange="toggleSelectAll(this.checked)"></th><th>#</th><th>封面</th><th>标题</th><th>VOD FileID</th><th>来源</th><th>分类</th><th>教练</th><th>标签</th><th>添加方式</th><th>分类命中</th><th>添加日期</th><th>播放</th><th>操作</th>
+            <th><input type="checkbox" class="select-all" onchange="toggleSelectAll(this.checked)"></th><th>#</th><th>封面</th><th>标题</th><th>质量</th><th>VOD FileID</th><th>来源</th><th>分类</th><th>教练</th><th>标签</th><th>添加方式</th><th>分类命中</th><th>添加日期</th><th>播放</th><th>操作</th>
           </tr></thead>
-          <tbody id="videoTableBody"><tr><td colspan="14" class="empty-state">加载中...</td></tr></tbody>
+          <tbody id="videoTableBody"><tr><td colspan="15" class="empty-state">加载中...</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Governance -->
+    <div class="tab-panel" id="panel-governance">
+      <div class="toolbar">
+        <h2>内容治理</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="reviewVisibleVideos()" id="reviewVisibleBtn">评估当前列表</button>
+          <button class="btn btn-sm" style="background:#eee;color:#666" onclick="loadGovernance()">刷新</button>
+        </div>
+      </div>
+      <div class="governance-grid">
+        <div class="review-card">
+          <h3 style="font-size:15px;margin-bottom:10px">AI 建议</h3>
+          <div id="governanceReviews" class="empty-state">点击「评估当前列表」生成建议...</div>
+        </div>
+        <div class="review-card">
+          <h3 style="font-size:15px;margin-bottom:10px">被自动拦截的候选</h3>
+          <div id="qualityCandidates" class="empty-state">加载中...</div>
+        </div>
       </div>
     </div>
 
@@ -513,7 +562,8 @@ function switchTab(name) {
 // Load all data
 // ============================================================
 async function loadAll() {
-  await Promise.all([loadVideos(), loadCoaches(), loadCategories()]);
+  await Promise.all([loadCoaches(), loadCategories()]);
+  await loadVideos();
 }
 
 // ============================================================
@@ -531,12 +581,21 @@ let selectedVideoIds = new Set();
 
 function renderVideos() {
   const tbody = document.getElementById('videoTableBody');
-  if (allVideos.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" class="empty-state">暂无视频，点击上方按钮添加</td></tr>';
+  const qFilter = document.getElementById('videoQualityFilter')?.value || '';
+  const kw = (document.getElementById('videoKeywordFilter')?.value || '').trim().toLowerCase();
+  const visibleVideos = allVideos.filter(v => {
+    const q = v.qualityStatus || 'standard';
+    if (qFilter === 'unreviewed' && v.qualityReview) return false;
+    if (qFilter && qFilter !== 'unreviewed' && q !== qFilter) return false;
+    if (kw && !String(v.title || '').toLowerCase().includes(kw)) return false;
+    return true;
+  });
+  if (visibleVideos.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="15" class="empty-state">暂无视频，点击上方按钮添加</td></tr>';
     return;
   }
   const SOURCE_LABELS = { official: '<span class="tag" style="background:#dbeafe;color:#2563eb">官方</span>', curated: '<span class="tag" style="background:#d1fae5;color:#059669">精选</span>', discovered: '<span class="tag" style="background:#fef3c7;color:#d97706">发现</span>' };
-  tbody.innerHTML = allVideos.map((v, idx) => {
+  tbody.innerHTML = visibleVideos.map((v, idx) => {
     const cat = allCategories.find(c => c.id === v.categoryId);
     const parentCat = cat && cat.parentId ? allCategories.find(c => c.id === cat.parentId) : null;
     const catDisplay = cat ? (parentCat ? `${esc(parentCat.name)} › ${esc(cat.name)}` : esc(cat.name)) : (v.categoryId ? esc(v.categoryId) : '—');
@@ -545,11 +604,13 @@ function renderVideos() {
     const thumb = v.coverURL ? `<img class="cell-thumb" src="${esc(v.coverURL)}" alt="">` : '<span style="color:#ccc">无</span>';
     const sourceLabel = SOURCE_LABELS[v.sourceType] || SOURCE_LABELS.curated;
     const checked = selectedVideoIds.has(v.videoId) ? 'checked' : '';
+    const quality = qualityPill(v.qualityStatus || 'standard', v.qualityReview);
     return `<tr>
       <td><input type="checkbox" class="row-check" data-id="${esc(v.videoId)}" ${checked} onchange="onRowCheck(this)"></td>
       <td style="color:var(--text-secondary);font-size:12px">${idx + 1}</td>
       <td>${thumb}</td>
       <td class="cell-title">${esc(v.title)}</td>
+      <td>${quality}</td>
       <td class="cell-fileid">${v.vodFileId ? `<span title="${esc(v.vodFileId)}" style="cursor:pointer;color:var(--text-secondary)" onclick="navigator.clipboard.writeText('${esc(v.vodFileId)}');toast('已复制 FileID')">…${esc(v.vodFileId.slice(-6))} 📋</span>` : '<span style="color:#ccc">—</span>'}</td>
       <td>${sourceLabel}</td>
       <td class="cell-category" id="cat-cell-${esc(v.videoId)}"><span class="cat-editable" onclick="startInlineCategoryEdit('${esc(v.videoId)}')">${catDisplay}<span class="edit-icon">✏️</span></span></td>
@@ -578,6 +639,17 @@ function renderVideos() {
   updateBatchBar();
 }
 
+function qualityPill(status, review) {
+  const map = {
+    premium: ['优质', 'quality-premium'],
+    standard: ['普通', 'quality-standard'],
+    hidden: ['隐藏', 'quality-hidden'],
+  };
+  const [label, cls] = map[status] || map.standard;
+  const title = review && review.reason ? ` title="${esc(review.reason)}"` : '';
+  return `<span class="quality-pill ${cls}"${title}>${label}</span>`;
+}
+
 function onRowCheck(cb) {
   if (cb.checked) selectedVideoIds.add(cb.dataset.id);
   else selectedVideoIds.delete(cb.dataset.id);
@@ -585,7 +657,16 @@ function onRowCheck(cb) {
 }
 
 function toggleSelectAll(checked) {
-  if (checked) allVideos.forEach(v => selectedVideoIds.add(v.videoId));
+  const qFilter = document.getElementById('videoQualityFilter')?.value || '';
+  const kw = (document.getElementById('videoKeywordFilter')?.value || '').trim().toLowerCase();
+  const scope = allVideos.filter(v => {
+    const q = v.qualityStatus || 'standard';
+    if (qFilter === 'unreviewed' && v.qualityReview) return false;
+    if (qFilter && qFilter !== 'unreviewed' && q !== qFilter) return false;
+    if (kw && !String(v.title || '').toLowerCase().includes(kw)) return false;
+    return true;
+  });
+  if (checked) scope.forEach(v => selectedVideoIds.add(v.videoId));
   else selectedVideoIds.clear();
   document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
   updateBatchBar();
@@ -618,6 +699,19 @@ async function doBatchDelete() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
+async function doBatchQuality(qualityStatus) {
+  const ids = [...selectedVideoIds];
+  if (ids.length === 0) return;
+  const label = { premium: '优质', standard: '普通', hidden: '隐藏' }[qualityStatus] || qualityStatus;
+  if (!confirm(`确定把 ${ids.length} 个视频设为「${label}」？\n\n隐藏视频会从用户端视频广场移除，但后台仍保留。`)) return;
+  try {
+    const data = await api('batchUpdateVideoQuality', { videoIds: ids, qualityStatus });
+    toast(`已更新 ${data.updated || ids.length} 个视频`);
+    selectedVideoIds.clear();
+    await loadVideos();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
 function openVideoModal(editId) {
   const v = editId ? allVideos.find(x => x.videoId === editId) : null;
   const isEdit = !!v;
@@ -639,6 +733,15 @@ function openVideoModal(editId) {
         <option value="curated" ${!v || v.sourceType === 'curated' || !v.sourceType ? 'selected' : ''}>精选教练视频（权重50）</option>
         <option value="discovered" ${v && v.sourceType === 'discovered' ? 'selected' : ''}>发现的好视频（权重10）</option>
       </select>
+    </div>
+    <div class="form-group" style="background:#f8fafc;padding:12px;border-radius:8px;border:1px dashed var(--border)">
+      <label>视频质量 *</label>
+      <select id="f_qualityStatus">
+        <option value="premium" ${v && v.qualityStatus === 'premium' ? 'selected' : ''}>优质视频（提高排序）</option>
+        <option value="standard" ${!v || !v.qualityStatus || v.qualityStatus === 'standard' ? 'selected' : ''}>普通视频（正常展示）</option>
+        <option value="hidden" ${v && v.qualityStatus === 'hidden' ? 'selected' : ''}>隐藏视频（后台保留，用户端不展示）</option>
+      </select>
+      <div class="form-hint">${v && v.qualityReview && v.qualityReview.reason ? `AI建议：${esc(v.qualityReview.reason)}` : '低质/生活/带货/直播无主题内容建议设为隐藏'}</div>
     </div>
     <div class="form-group">
       <label>抖音来源链接</label>
@@ -722,6 +825,7 @@ function openVideoModal(editId) {
       coverURL: document.getElementById('f_coverURL').value.trim(),
       categoryId, coachId,
       sourceType,
+      qualityStatus: document.getElementById('f_qualityStatus').value,
       sourceURL: document.getElementById('f_sourceURL').value.trim(),
       baseWeight: BASE_WEIGHTS[sourceType] || 10,
       duration: parseInt(document.getElementById('f_duration').value) || 0,
@@ -1727,6 +1831,116 @@ function addSuggestedTag(tag) {
   if (!existing.includes(tag)) {
     existing.push(tag);
     input.value = existing.join(', ');
+  }
+}
+
+// ============================================================
+// 内容治理
+// ============================================================
+async function loadGovernance() {
+  renderGovernanceReviews();
+  await loadQualityCandidates();
+}
+
+function renderGovernanceReviews(items) {
+  const container = document.getElementById('governanceReviews');
+  if (!container) return;
+  const videos = items || allVideos.filter(v => v.qualityReview).slice(0, 30).map(v => ({
+    videoId: v.videoId,
+    title: v.title,
+    currentQualityStatus: v.qualityStatus || 'standard',
+    review: v.qualityReview,
+  }));
+  if (!videos.length) {
+    container.innerHTML = '<div class="empty-state">暂无 AI 建议，点击「评估当前列表」生成。</div>';
+    return;
+  }
+  container.innerHTML = videos.map(item => {
+    const v = allVideos.find(x => x.videoId === item.videoId) || item;
+    const r = item.review || {};
+    const cat = r.suggestedCategoryId ? allCategories.find(c => c.id === r.suggestedCategoryId) : null;
+    const tags = (r.suggestedTags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+    return `<div class="candidate-row">
+      <div class="review-title">${esc(v.title || item.title || '')}</div>
+      <div class="review-meta">
+        <span>当前：${qualityPill(item.currentQualityStatus || v.qualityStatus || 'standard')}</span>
+        <span>建议：${qualityPill(r.qualityStatus || 'standard', r)}</span>
+        <span>置信度：${Math.round((Number(r.confidence) || 0) * 100)}%</span>
+        <span>来源：${esc(r.source || '-')}</span>
+      </div>
+      <div style="font-size:13px;color:var(--text-secondary)">原因：${esc(r.reason || '-')}</div>
+      <div style="font-size:13px;margin-top:6px">建议分类：${cat ? esc(cat.name) : esc(r.suggestedCategoryId || '不调整')}　建议标签：${tags || '不调整'}</div>
+      <div class="review-actions">
+        <button class="btn btn-sm btn-primary" onclick="applyQualitySuggestion('${esc(item.videoId)}')">应用建议</button>
+        <button class="btn btn-sm" style="background:#f59e0b;color:#fff" onclick="setOneQuality('${esc(item.videoId)}','premium')">设优质</button>
+        <button class="btn btn-sm" style="background:#0ea5e9;color:#fff" onclick="setOneQuality('${esc(item.videoId)}','standard')">设普通</button>
+        <button class="btn btn-sm" style="background:#ef4444;color:#fff" onclick="setOneQuality('${esc(item.videoId)}','hidden')">设隐藏</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function reviewVisibleVideos() {
+  const btn = document.getElementById('reviewVisibleBtn');
+  btn.disabled = true;
+  btn.textContent = '评估中...';
+  try {
+    const data = await api('reviewVideoQualityBatch', { limit: 30, offset: 0, onlyNeedsReview: false });
+    toast(`已生成 ${data.reviewed || 0} 条建议`);
+    await loadVideos();
+    renderGovernanceReviews(data.results || []);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '评估当前列表';
+  }
+}
+
+async function applyQualitySuggestion(videoId) {
+  if (!confirm('应用该 AI 建议？\n\n会更新质量状态，并尽量应用建议标题、分类和标签。')) return;
+  try {
+    await api('applyVideoQualitySuggestion', { videoId });
+    toast('建议已应用');
+    await loadVideos();
+    renderGovernanceReviews();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function setOneQuality(videoId, qualityStatus) {
+  try {
+    await api('batchUpdateVideoQuality', { videoIds: [videoId], qualityStatus });
+    toast('质量已更新');
+    await loadVideos();
+    renderGovernanceReviews();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadQualityCandidates() {
+  const container = document.getElementById('qualityCandidates');
+  if (!container) return;
+  container.innerHTML = '<div class="empty-state">加载中...</div>';
+  try {
+    const data = await api('adminListQualityCandidates', { limit: 50 });
+    const items = data.candidates || [];
+    if (!items.length) {
+      container.innerHTML = '<div class="empty-state">暂无被自动拦截的视频。</div>';
+      return;
+    }
+    container.innerHTML = items.map(c => {
+      const r = c.qualityReview || {};
+      return `<div class="candidate-row">
+        <div class="review-title">${esc(c.title || c.awemeId)}</div>
+        <div class="review-meta">
+          <span>${esc(c.coachName || c.coachId || '未知教练')}</span>
+          <span>${qualityPill(r.qualityStatus || 'hidden', r)}</span>
+          <span>${esc(r.reason || '已拦截')}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary)">awemeId：${esc(c.awemeId || '')}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state" style="color:var(--danger)">加载失败：${esc(e.message)}</div>`;
   }
 }
 

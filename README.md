@@ -59,6 +59,8 @@ python run.py --daemon
 
 - 后台新增“费用监控”页，调用 CloudBase `getBillingDashboard`，展示账户余额、本月总花费、VOD 花费、VOD 存储/CDN 用量，并在无密钥、无权限、账单未就绪或接口异常时显示 warning。
 - 添加教练弹窗新增“从抖音链接解析”，调用 CloudBase `resolveCoachSource`，解析昵称、头像、主页链接、`secUid`、候选 `coachId`，只填表不自动保存。
+- 后台新增“内容治理”页，支持视频级 `premium / standard / hidden` 质量状态、AI/规则质量建议、批量设为优质/普通/隐藏，以及自动抓取前的低质候选拦截。
+- `video-auto-fill/config.py` 会自动读取同目录 `.env`；服务器真实密钥放在 `/opt/video-auto-fill/.env`，不要提交到 Git。
 
 ## 备注
 

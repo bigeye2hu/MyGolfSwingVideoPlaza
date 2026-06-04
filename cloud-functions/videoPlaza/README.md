@@ -31,7 +31,15 @@ Optional mail notification variables:
 - `MAIL_USER`
 - `MAIL_PASS`
 
+Optional quality review variables:
+
+- `LLM_API_URL`
+- `LLM_API_KEY`
+- `LLM_MODEL`
+
 ## Admin Actions Added In Phase 1
 
 - `getBillingDashboard`: returns account balance, month cost, VOD cost, storage usage, CDN usage, update time, and warnings.
 - `resolveCoachSource`: resolves a Douyin source link/share text into a coach draft. It fills the admin form only; it does not create the coach automatically.
+- `reviewVideoQuality` / `reviewVideoQualityBatch`: generates quality suggestions without automatically hiding videos.
+- `applyVideoQualitySuggestion` / `batchUpdateVideoQuality`: applies reviewed quality changes.

@@ -3,9 +3,39 @@ Step 5: LLM 自动分类 + 标签生成
 两阶段分类：先匹配一级分类，再匹配/创建二级分类。
 """
 from utils.llm import call_llm
-from steps.fetch_whitelist import create_category
 
 PENDING_SUBCATEGORY = "pending_subcategory"
+
+
+KEYWORD_CATEGORY_RULES = [
+    (("鸡翅膀", "鸡翅"), "ChickenWing"),
+    (("提前释放", "捞球"), "Scooping"),
+    (("右曲", "slice", "右偏"), "slice"),
+    (("重心", "转移"), "zhongxinzhuanyi"),
+    (("身体旋转", "转肩", "旋转"), "shentixuanzhuan"),
+    (("切杆", "短切"), "duanqiejishu"),
+    (("推杆",), "Putting"),
+    (("铁杆",), "Iron"),
+    (("一号木", "driver"), "Driver"),
+    (("木杆",), "Wood"),
+    (("坡度", "特殊球位", "山地球场"), "teshuqiuwei"),
+    (("握杆",), "woganjiqiao"),
+    (("挥杆节奏", "节奏"), "huiganjiezou"),
+    (("通道", "轨道", "路径"), "zonghejiaoxue"),
+    (("上杆", "蓄力"), "shangganxuli"),
+    (("练习", "练球", "训练方法"), "lianqiufangfa"),
+]
+
+
+def _keyword_category(title: str, description: str, categories_data: dict) -> str | None:
+    text = f"{title} {description}".lower()
+    valid_ids = {c.get("id") for c in categories_data.get("categories", []) if c.get("parentId")}
+    for keywords, category_id in KEYWORD_CATEGORY_RULES:
+        if category_id not in valid_ids:
+            continue
+        if any(k.lower() in text for k in keywords):
+            return category_id
+    return None
 
 
 def _build_parent_prompt(title: str, description: str, categories_data: dict) -> str:
@@ -59,6 +89,11 @@ def match_category(title: str, description: str, categories_data: dict) -> tuple
     两阶段分类匹配。
     返回 (category_id, notification_message)
     """
+    keyword_cat = _keyword_category(title, description, categories_data)
+    if keyword_cat:
+        print(f"    ✅ 关键词分类: {keyword_cat}")
+        return keyword_cat, None
+
     # ── 阶段1：一级分类 ──
     swing_keywords = ("挥杆分析", "挥杆")
     player_keywords = ("球员", "选手", "球手")
@@ -109,11 +144,8 @@ def match_category(title: str, description: str, categories_data: dict) -> tuple
         else:
             new_name, new_desc = parts, ""
 
-        print(f"    🤖 LLM建议创建: {new_name}（{new_desc}）")
-        new_id = create_category(new_name, parent_id, new_desc)
-        if new_id:
-            return new_id, f"已创建新分类: {new_name} (属于: {parent_name})"
-        return PENDING_SUBCATEGORY, "创建分类失败，已放入「待分类」"
+        print(f"    ⚠️ LLM建议创建新分类: {new_name}（{new_desc}），自动抓取阶段暂不创建")
+        return PENDING_SUBCATEGORY, "建议创建新分类，已放入「待分类」等待人工确认"
 
     # 精确匹配
     child_ids = [c["id"] for c in categories_data.get("categories", []) if c.get("parentId") == parent_id]

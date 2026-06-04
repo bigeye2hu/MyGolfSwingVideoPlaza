@@ -70,6 +70,7 @@ from steps.select_videos import select_videos_round_robin, fetch_single_video, s
 from steps.download import download_video
 from steps.upload_vod import upload_to_vod
 from steps.classify import match_category, generate_tags
+from steps.quality import review_video_quality, record_quality_candidate
 from steps.publish import publish_to_plaza
 from utils.dedup import is_duplicate, log_upload, log_publish
 
@@ -222,10 +223,21 @@ def process_one(video_info: dict, coach: dict, categories_data: dict, added_by: 
         vod_url = existing_url or ""
         file_id = existing_fid
         cover_url = video_info.get("cover_url", "")
+        quality_review = review_video_quality(video_info, coach, categories_data)
     elif dup:
         print(f"  ⏭️ 视频已处理过，跳过")
         return True
     else:
+        # ── 质量筛选：低质内容不下载、不上传 VOD ──
+        print(f"  🔎 正在评估视频质量...")
+        quality_review = review_video_quality(video_info, coach, categories_data)
+        q = quality_review.get("qualityStatus", "standard")
+        print(f"  🔎 质量: {q} ({quality_review.get('reason', '')})")
+        if q == "hidden":
+            record_quality_candidate(video_info, coach, quality_review)
+            print(f"  ⏭️ 已拦截为低质候选，不下载/上传")
+            return True
+
         # ── 下载 ──
         local_path = download_video(video_info)
         if not local_path:
@@ -273,6 +285,8 @@ def process_one(video_info: dict, coach: dict, categories_data: dict, added_by: 
         tags=tags,
         added_by=added_by,
         classification_hit=classification_hit,
+        quality_status=quality_review.get("qualityStatus", "standard"),
+        quality_review=quality_review,
     )
     if ok:
         log_publish(aweme_id, file_id, coach_id, title)
