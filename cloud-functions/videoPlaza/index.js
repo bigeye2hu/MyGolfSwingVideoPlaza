@@ -68,6 +68,7 @@ const LLM_MODEL = process.env.LLM_MODEL || 'MiniMax-M2.7';
 
 const QUALITY_STATUSES = ['premium', 'standard', 'hidden'];
 const QUALITY_LABELS = { premium: '优质', standard: '普通', hidden: '隐藏' };
+const QUALITY_SCORE_THRESHOLDS = { hiddenMax: 39, premiumMin: 75 };
 const SOURCE_BASE_WEIGHTS = { official: 100, curated: 50, discovered: 10 };
 
 /**
@@ -292,6 +293,22 @@ async function getPlazaVideos({ categoryId, parentCategoryId, coachId, keyword, 
 
 function normalizeQualityStatus(value) {
     return QUALITY_STATUSES.includes(value) ? value : 'standard';
+}
+
+function normalizeQualityScore(value, fallbackStatus = 'standard') {
+    const n = Number(value);
+    if (Number.isFinite(n)) return Math.max(0, Math.min(100, Math.round(n)));
+    const status = normalizeQualityStatus(fallbackStatus);
+    if (status === 'premium') return 82;
+    if (status === 'hidden') return 25;
+    return 58;
+}
+
+function qualityStatusFromScore(score, fallbackStatus = 'standard') {
+    const normalized = normalizeQualityScore(score, fallbackStatus);
+    if (normalized <= QUALITY_SCORE_THRESHOLDS.hiddenMax) return 'hidden';
+    if (normalized >= QUALITY_SCORE_THRESHOLDS.premiumMin) return 'premium';
+    return 'standard';
 }
 
 function baseWeightForVideo(sourceType, qualityStatus) {
@@ -1376,21 +1393,26 @@ function heuristicQualityReview(video) {
     const teaching = teachingPatterns.some(r => r.test(text));
     const tooShort = compact.length < 12;
 
+    let qualityScore = 58;
     let qualityStatus = 'standard';
     let confidence = 0.62;
     let reason = '高尔夫相关内容，可正常展示。';
     if (bad || (tooShort && !teaching)) {
-        qualityStatus = 'hidden';
+        qualityScore = bad ? 20 : 35;
+        qualityStatus = qualityStatusFromScore(qualityScore, 'hidden');
         confidence = bad ? 0.86 : 0.68;
         reason = bad ? '偏生活、直播、带货或娱乐，不适合作为练球教学视频。' : '标题/描述信息不足，暂时无法判断教学价值。';
     } else if (teaching) {
-        qualityStatus = /分析|纠正|练习|训练|方法|技巧|问题|错误|处理/.test(text) ? 'premium' : 'standard';
+        qualityScore = /分析|纠正|练习|训练|方法|技巧|问题|错误|处理/.test(text) ? 78 : 62;
+        qualityStatus = qualityStatusFromScore(qualityScore, 'standard');
         confidence = qualityStatus === 'premium' ? 0.78 : 0.7;
         reason = qualityStatus === 'premium' ? '包含明确技术点或练习方法。' : '有高尔夫教学相关信息。';
     }
 
     return {
         qualityStatus,
+        qualityScore,
+        thresholds: QUALITY_SCORE_THRESHOLDS,
         confidence,
         reason,
         suggestedCategoryId: video.categoryId || '',
@@ -1408,9 +1430,9 @@ function callQualityLLM(video, categories) {
         const prompt = `你是高尔夫教学内容审核助手。请按“教学价值优先”评估视频质量。
 
 质量定义：
-- premium：明确讲技术点、挥杆分析、错误纠正、练球方法、球杆/球位处理，可直接帮助用户练球。
-- standard：高尔夫相关但教学价值一般，描述可理解，能合理归类。
-- hidden：生活闲聊、直播预告/直播切片无主题、带货/防晒/配色等非训练内容、标题过短无法判断、分类只能硬凑。
+- 75-100 premium：明确讲技术点、挥杆分析、错误纠正、练球方法、球杆/球位处理，可直接帮助用户练球。
+- 40-74 standard：高尔夫相关但教学价值一般，描述可理解，能合理归类。
+- 0-39 hidden：生活闲聊、直播预告/直播切片无主题、带货/防晒/配色等非训练内容、标题过短无法判断、分类只能硬凑。
 
 视频：
 标题：${video.title || ''}
@@ -1422,7 +1444,7 @@ function callQualityLLM(video, categories) {
 ${compactCategoryOptions(categories)}
 
 只返回 JSON，不要解释：
-{"qualityStatus":"premium|standard|hidden","confidence":0.0,"reason":"20字内原因","suggestedCategoryId":"分类id或空","suggestedTitle":"建议标题或原标题","suggestedTags":["最多3个标签"]}`;
+{"qualityScore":0,"qualityStatus":"premium|standard|hidden","confidence":0.0,"reason":"20字内原因","suggestedCategoryId":"分类id或空","suggestedTitle":"建议标题或原标题","suggestedTags":["最多3个标签"]}`;
 
         const payload = JSON.stringify({
             model: LLM_MODEL,
@@ -1451,8 +1473,11 @@ ${compactCategoryOptions(categories)}
                     const textItem = (json.content || []).find(item => item.type === 'text');
                     if (!textItem) return resolve(null);
                     const parsed = JSON.parse(stripCodeFence(textItem.text));
+                    const qualityScore = normalizeQualityScore(parsed.qualityScore, parsed.qualityStatus);
                     resolve({
-                        qualityStatus: normalizeQualityStatus(parsed.qualityStatus),
+                        qualityStatus: qualityStatusFromScore(qualityScore, parsed.qualityStatus),
+                        qualityScore,
+                        thresholds: QUALITY_SCORE_THRESHOLDS,
                         confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
                         reason: String(parsed.reason || '').slice(0, 80),
                         suggestedCategoryId: String(parsed.suggestedCategoryId || ''),
@@ -1485,6 +1510,9 @@ async function buildQualityReview(video) {
     if (!review.reason) review.reason = heuristicQualityReview(video).reason;
     if (!review.suggestedTitle) review.suggestedTitle = video.title || '';
     if (!Array.isArray(review.suggestedTags)) review.suggestedTags = Array.isArray(video.tags) ? video.tags.slice(0, 3) : [];
+    review.qualityScore = normalizeQualityScore(review.qualityScore, review.qualityStatus);
+    review.thresholds = review.thresholds || QUALITY_SCORE_THRESHOLDS;
+    review.qualityStatus = qualityStatusFromScore(review.qualityScore, review.qualityStatus);
     return review;
 }
 

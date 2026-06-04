@@ -10,6 +10,8 @@ from datetime import datetime
 from config import CLOUDBASE_API, ADMIN_KEY
 from utils.llm import call_llm
 
+QUALITY_SCORE_THRESHOLDS = {"hiddenMax": 39, "premiumMin": 75}
+
 
 def _json_from_text(text: str) -> dict | None:
     if not text:
@@ -33,14 +35,38 @@ def _normalize_status(value: str) -> str:
     return value if value in {"premium", "standard", "hidden"} else "standard"
 
 
+def _normalize_score(value, fallback_status: str = "standard") -> int:
+    try:
+        return max(0, min(100, round(float(value))))
+    except Exception:
+        status = _normalize_status(fallback_status)
+        if status == "premium":
+            return 82
+        if status == "hidden":
+            return 25
+        return 58
+
+
+def _status_from_score(score, fallback_status: str = "standard") -> str:
+    normalized = _normalize_score(score, fallback_status)
+    if normalized <= QUALITY_SCORE_THRESHOLDS["hiddenMax"]:
+        return "hidden"
+    if normalized >= QUALITY_SCORE_THRESHOLDS["premiumMin"]:
+        return "premium"
+    return "standard"
+
+
 def _heuristic_review(video_info: dict) -> dict:
     title = f"{video_info.get('title', '')} {video_info.get('description', '')}"
     bad = bool(re.search(r"直播(预告|的视频|答疑|回放)?|烧烤|喝酒|打枪|射击|聚会|娱乐|防晒|面罩|帽子|好物|上新|橱窗|同款|购买|搭配|音乐|弹唱|配色", title))
     teaching = bool(re.search(r"挥杆|上杆|下杆|击球|切杆|推杆|铁杆|木杆|一号木|球位|坡度|重心|旋转|释放|练习|训练|纠正|分析|教学|技巧|方法|错误|问题", title))
     compact = re.sub(r"#[^\s#]+", "", title).strip()
     if bad or (len(compact) < 12 and not teaching):
+        quality_score = 20 if bad else 35
         return {
-            "qualityStatus": "hidden",
+            "qualityStatus": _status_from_score(quality_score, "hidden"),
+            "qualityScore": quality_score,
+            "thresholds": QUALITY_SCORE_THRESHOLDS,
             "confidence": 0.86 if bad else 0.68,
             "reason": "偏生活、直播、带货或描述不足",
             "suggestedCategoryId": "",
@@ -49,8 +75,11 @@ def _heuristic_review(video_info: dict) -> dict:
             "source": "heuristic",
             "reviewedAt": datetime.now().isoformat() + "Z",
         }
+    quality_score = 78 if re.search(r"分析|纠正|练习|训练|方法|技巧|问题|错误|处理", title) else 62
     return {
-        "qualityStatus": "premium" if re.search(r"分析|纠正|练习|训练|方法|技巧|问题|错误|处理", title) else "standard",
+        "qualityStatus": _status_from_score(quality_score, "standard"),
+        "qualityScore": quality_score,
+        "thresholds": QUALITY_SCORE_THRESHOLDS,
         "confidence": 0.76,
         "reason": "包含高尔夫教学相关信息",
         "suggestedCategoryId": "",
@@ -70,9 +99,9 @@ def review_video_quality(video_info: dict, coach: dict, categories_data: dict) -
     prompt = f"""你是高尔夫教学内容审核助手。请按“教学价值优先”评估视频质量。
 
 质量定义：
-- premium：明确讲技术点、挥杆分析、错误纠正、练球方法、球杆/球位处理，可直接帮助用户练球。
-- standard：高尔夫相关但教学价值一般，描述可理解，能合理归类。
-- hidden：生活闲聊、直播预告/直播切片无主题、带货/防晒/配色等非训练内容、标题过短无法判断、分类只能硬凑。
+- 75-100 premium：明确讲技术点、挥杆分析、错误纠正、练球方法、球杆/球位处理，可直接帮助用户练球。
+- 40-74 standard：高尔夫相关但教学价值一般，描述可理解，能合理归类。
+- 0-39 hidden：生活闲聊、直播预告/直播切片无主题、带货/防晒/配色等非训练内容、标题过短无法判断、分类只能硬凑。
 
 教练：{coach.get('name', '')}
 标题：{video_info.get('title', '')}
@@ -82,13 +111,16 @@ def review_video_quality(video_info: dict, coach: dict, categories_data: dict) -
 {category_lines}
 
 只返回 JSON：
-{{"qualityStatus":"premium|standard|hidden","confidence":0.0,"reason":"20字内原因","suggestedCategoryId":"分类id或空","suggestedTitle":"建议标题或原标题","suggestedTags":["最多3个标签"]}}"""
+{{"qualityScore":0,"qualityStatus":"premium|standard|hidden","confidence":0.0,"reason":"20字内原因","suggestedCategoryId":"分类id或空","suggestedTitle":"建议标题或原标题","suggestedTags":["最多3个标签"]}}"""
     result = call_llm(prompt, temperature=0.1)
     parsed = _json_from_text(result or "")
     if not parsed:
         return _heuristic_review(video_info)
+    quality_score = _normalize_score(parsed.get("qualityScore"), parsed.get("qualityStatus", "standard"))
     review = {
-        "qualityStatus": _normalize_status(parsed.get("qualityStatus", "standard")),
+        "qualityStatus": _status_from_score(quality_score, parsed.get("qualityStatus", "standard")),
+        "qualityScore": quality_score,
+        "thresholds": QUALITY_SCORE_THRESHOLDS,
         "confidence": max(0, min(1, float(parsed.get("confidence") or 0))),
         "reason": str(parsed.get("reason") or "")[:80],
         "suggestedCategoryId": str(parsed.get("suggestedCategoryId") or ""),
