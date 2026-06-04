@@ -980,6 +980,11 @@ function openCoachModal(editId) {
       <input id="f_douyinId" value="${c ? esc(c.douyinId || '') : ''}" placeholder="用户主页显示的抖音号；没有拿到时可留空">
     </div>
     <div class="form-group">
+      <label>抖音 sec_uid</label>
+      <input id="f_secUid" value="${c ? esc(c.secUid || '') : ''}" placeholder="抖音主页内部ID，链接解析自动填充" readonly style="background:#f5f5f5">
+      <div class="form-hint">自动抓取优先使用平台主页 URL；该字段用于记录内部来源身份，通常无需手动修改。</div>
+    </div>
+    <div class="form-group">
       <label style="display:flex;align-items:flex-start;gap:10px;font-weight:normal;cursor:pointer;line-height:1.5">
         <input type="checkbox" id="f_autoFillEnabled" style="margin-top:4px" ${!c || c.autoFillEnabled !== false ? 'checked' : ''}>
         <span>参与后台自动抓取脚本（关闭后仍保留教练，仅不再从抖音拉取该源）</span>
@@ -1076,6 +1081,7 @@ function openCoachModal(editId) {
       name,
       tier: document.getElementById('f_coachTier').value,
       douyinId: document.getElementById('f_douyinId').value.trim(),
+      secUid: document.getElementById('f_secUid').value.trim(),
       autoFillEnabled: document.getElementById('f_autoFillEnabled').checked,
       avatarURL: document.getElementById('f_avatarURL').value.trim(),
       bannerURL: document.getElementById('f_bannerURL').value.trim(),
@@ -1172,6 +1178,7 @@ async function resolveCoachSourceFromInput() {
     if (coachIdEl && !coachIdEl.value.trim()) coachIdEl.value = r.suggestedCoachId || '';
     document.getElementById('f_coachName').value = r.name || '';
     document.getElementById('f_douyinId').value = r.douyinId || r.displayName || '';
+    document.getElementById('f_secUid').value = r.secUid || '';
     document.getElementById('f_autoFillEnabled').checked = true;
     if (r.avatarURL) {
       document.getElementById('f_avatarURL').value = r.avatarURL;

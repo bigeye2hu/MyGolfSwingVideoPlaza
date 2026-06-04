@@ -878,6 +878,7 @@ async function addCoach(coachData) {
         region: coachData.region || '',
         tier,
         douyinId: coachData.douyinId || '',
+        secUid: coachData.secUid || '',
         autoFillEnabled: coachData.autoFillEnabled === false ? false : true,
     };
 
@@ -1295,7 +1296,7 @@ async function updateCoach(params) {
         return { success: false, error: '缺少 coachId' };
     }
 
-    const allowedFields = ['name', 'avatarURL', 'certification', 'bio', 'externalLinks', 'bannerURL', 'badges', 'region', 'tier', 'douyinId', 'autoFillEnabled'];
+    const allowedFields = ['name', 'avatarURL', 'certification', 'bio', 'externalLinks', 'bannerURL', 'badges', 'region', 'tier', 'douyinId', 'secUid', 'autoFillEnabled'];
     const updateData = {};
     for (const field of allowedFields) {
         if (updates[field] !== undefined) {
