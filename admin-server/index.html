@@ -216,6 +216,13 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
 .review-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
 .candidate-row { padding:10px 0; border-bottom:1px solid var(--border); }
 .candidate-row:last-child { border-bottom:0; }
+.panel-switch { display:flex; gap:6px; margin-bottom:12px; }
+.panel-switch button { border:1px solid var(--border); background:#fff; color:var(--text-secondary); padding:7px 12px; border-radius:var(--radius); cursor:pointer; font-size:13px; }
+.panel-switch button.active { background:var(--primary); border-color:var(--primary); color:#fff; font-weight:600; }
+.coach-subpanel { display:none; }
+.coach-subpanel.active { display:block; }
+.stat-num { font-weight:700; font-size:15px; }
+.stat-muted { color:var(--text-secondary); font-size:12px; }
 
 /* ---- Responsive ---- */
 @media (max-width: 640px) {
@@ -242,7 +249,7 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
 <!-- ====== Main App ====== -->
 <div class="app" id="app">
   <div class="header">
-    <h1>🏌️ 挥呗视频广场 · 管理后台 <span class="admin-ui-version" title="若看不到「内容治理」，说明浏览器仍是缓存旧文件">UI v7</span></h1>
+    <h1>🏌️ 挥呗视频广场 · 管理后台 <span class="admin-ui-version" title="若看不到「内容治理」，说明浏览器仍是缓存旧文件">UI v8</span></h1>
     <div class="user-info">
       <span>管理员</span>
       <button class="btn btn-sm" onclick="doLogout()">退出</button>
@@ -327,16 +334,32 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
     <!-- Coaches -->
     <div class="tab-panel" id="panel-coaches">
       <div class="toolbar">
-        <h2>教练列表</h2>
+        <h2>教练管理</h2>
         <button class="btn btn-primary" onclick="openCoachModal()">+ 添加教练</button>
       </div>
-      <div class="table-wrap">
+      <div class="panel-switch">
+        <button type="button" id="coachPanelListBtn" class="active" onclick="switchCoachPanel('list')">教练列表</button>
+        <button type="button" id="coachPanelStatsBtn" onclick="switchCoachPanel('stats')">视频质量统计</button>
+      </div>
+      <div class="coach-subpanel active" id="coachPanelList">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>头像</th><th>ID</th><th>姓名</th><th>等级</th><th>认证</th><th>自动抓取</th><th>外部链接</th><th>操作</th>
+            </tr></thead>
+            <tbody id="coachTableBody"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="coach-subpanel" id="coachPanelStats">
+        <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>头像</th><th>ID</th><th>姓名</th><th>等级</th><th>认证</th><th>自动抓取</th><th>外部链接</th><th>操作</th>
+            <th>教练</th><th>等级</th><th>总数</th><th>好的（优质）</th><th>中等（普通）</th><th>低的（隐藏）</th><th>平均分</th><th>优质占比</th>
           </tr></thead>
-          <tbody id="coachTableBody"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody>
+          <tbody id="coachStatsTableBody"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody>
         </table>
+        </div>
       </div>
     </div>
 
@@ -477,6 +500,7 @@ let allVideos = [];
 let allCoaches = [];
 let allCategories = [];
 let videoTotalCount = 0;
+let activeCoachPanel = 'list';
 
 // ============================================================
 // API Helper
@@ -579,6 +603,7 @@ async function loadVideos() {
     allVideos = data.videos || [];
     videoTotalCount = Number(data.total || allVideos.length);
     renderVideos();
+    renderCoachQualityStats();
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -1009,7 +1034,17 @@ async function loadCoaches() {
     const data = await api('adminListCoaches');
     allCoaches = data.coaches || [];
     renderCoaches();
+    renderCoachQualityStats();
   } catch (e) { toast(e.message, 'error'); }
+}
+
+function switchCoachPanel(panel) {
+  activeCoachPanel = panel === 'stats' ? 'stats' : 'list';
+  document.getElementById('coachPanelList')?.classList.toggle('active', activeCoachPanel === 'list');
+  document.getElementById('coachPanelStats')?.classList.toggle('active', activeCoachPanel === 'stats');
+  document.getElementById('coachPanelListBtn')?.classList.toggle('active', activeCoachPanel === 'list');
+  document.getElementById('coachPanelStatsBtn')?.classList.toggle('active', activeCoachPanel === 'stats');
+  if (activeCoachPanel === 'stats') renderCoachQualityStats();
 }
 
 function renderCoaches() {
@@ -1036,6 +1071,81 @@ function renderCoaches() {
         <button class="btn btn-sm btn-primary" onclick="openCoachModal('${esc(c.id)}')">编辑</button>
         <button class="btn btn-sm btn-danger" onclick="confirmDeleteCoach('${esc(c.id)}','${esc(c.name)}')">删除</button>
       </td>
+    </tr>`;
+  }).join('');
+}
+
+function coachTierBadge(c) {
+  if (!c) return '<span class="tag" style="background:#f3f4f6;color:#6b7280">未指定</span>';
+  if (c.tier === 'official_partner') return '<span class="tag" style="background:#dbeafe;color:#2563eb">官方合作</span>';
+  if (c.tier === 'pending') return '<span class="tag" style="background:#f3f4f6;color:#6b7280">待确认</span>';
+  return '<span class="tag" style="background:#d1fae5;color:#059669">精选</span>';
+}
+
+function renderCoachQualityStats() {
+  const tbody = document.getElementById('coachStatsTableBody');
+  if (!tbody) return;
+  if (!allCoaches.length && !allVideos.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无统计数据</td></tr>';
+    return;
+  }
+  const statsByCoach = new Map();
+  allCoaches.forEach(c => statsByCoach.set(c.id, {
+    coach: c,
+    total: 0,
+    premium: 0,
+    standard: 0,
+    hidden: 0,
+    scoreSum: 0,
+    scored: 0,
+  }));
+  allVideos.forEach(v => {
+    const key = v.coachId || '__missing__';
+    if (!statsByCoach.has(key)) {
+      statsByCoach.set(key, {
+        coach: key === '__missing__' ? null : { id: key, name: key, tier: 'pending' },
+        total: 0,
+        premium: 0,
+        standard: 0,
+        hidden: 0,
+        scoreSum: 0,
+        scored: 0,
+      });
+    }
+    const s = statsByCoach.get(key);
+    const q = v.qualityStatus || 'standard';
+    s.total += 1;
+    if (q === 'premium') s.premium += 1;
+    else if (q === 'hidden') s.hidden += 1;
+    else s.standard += 1;
+    const score = Number(v.qualityReview?.qualityScore);
+    if (Number.isFinite(score)) {
+      s.scoreSum += score;
+      s.scored += 1;
+    }
+  });
+  const rows = Array.from(statsByCoach.values())
+    .sort((a, b) => b.total - a.total || b.premium - a.premium || String(a.coach?.name || '').localeCompare(String(b.coach?.name || ''), 'zh-CN'));
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无统计数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(s => {
+    const c = s.coach;
+    const avgScore = s.scored ? Math.round(s.scoreSum / s.scored) : null;
+    const premiumRate = s.total ? Math.round((s.premium / s.total) * 100) : 0;
+    return `<tr>
+      <td>
+        <div style="font-weight:600">${esc(c?.name || '未指定教练')}</div>
+        <div class="stat-muted">${esc(c?.id || 'coachId 为空')}</div>
+      </td>
+      <td>${coachTierBadge(c)}</td>
+      <td><span class="stat-num">${s.total}</span></td>
+      <td><span class="quality-pill quality-premium">优质 <span class="quality-score">${s.premium}</span></span></td>
+      <td><span class="quality-pill quality-standard">普通 <span class="quality-score">${s.standard}</span></span></td>
+      <td><span class="quality-pill quality-hidden">隐藏 <span class="quality-score">${s.hidden}</span></span></td>
+      <td>${avgScore === null ? '<span class="stat-muted">-</span>' : `<span class="stat-num">${avgScore}</span><span class="stat-muted">分</span>`}</td>
+      <td><span class="stat-num">${premiumRate}</span><span class="stat-muted">%</span></td>
     </tr>`;
   }).join('');
 }
