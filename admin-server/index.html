@@ -241,7 +241,7 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
 <!-- ====== Main App ====== -->
 <div class="app" id="app">
   <div class="header">
-    <h1>🏌️ 挥呗视频广场 · 管理后台 <span class="admin-ui-version" title="若看不到「内容治理」，说明浏览器仍是缓存旧文件">UI v5</span></h1>
+    <h1>🏌️ 挥呗视频广场 · 管理后台 <span class="admin-ui-version" title="若看不到「内容治理」，说明浏览器仍是缓存旧文件">UI v6</span></h1>
     <div class="user-info">
       <span>管理员</span>
       <button class="btn btn-sm" onclick="doLogout()">退出</button>
@@ -289,6 +289,7 @@ th .select-all, td .row-check { width: 16px; height: 16px; cursor: pointer; }
           <option value="unreviewed">未评估</option>
         </select>
         <input id="videoKeywordFilter" placeholder="按标题搜索" oninput="renderVideos()">
+        <span id="videoListSummary" style="font-size:13px;color:var(--text-secondary)"></span>
       </div>
       <div class="table-wrap">
         <table>
@@ -473,6 +474,7 @@ let adminKey = '';
 let allVideos = [];
 let allCoaches = [];
 let allCategories = [];
+let videoTotalCount = 0;
 
 // ============================================================
 // API Helper
@@ -571,8 +573,9 @@ async function loadAll() {
 // ============================================================
 async function loadVideos() {
   try {
-    const data = await api('adminListVideos');
+    const data = await api('adminListVideos', { limit: 500, offset: 0 });
     allVideos = data.videos || [];
+    videoTotalCount = Number(data.total || allVideos.length);
     renderVideos();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -590,6 +593,7 @@ function renderVideos() {
     if (kw && !String(v.title || '').toLowerCase().includes(kw)) return false;
     return true;
   });
+  renderVideoListSummary(visibleVideos.length);
   if (visibleVideos.length === 0) {
     tbody.innerHTML = '<tr><td colspan="15" class="empty-state">暂无视频，点击上方按钮添加</td></tr>';
     return;
@@ -1031,6 +1035,19 @@ function renderCoaches() {
       </td>
     </tr>`;
   }).join('');
+}
+
+function renderVideoListSummary(visibleCount) {
+  const el = document.getElementById('videoListSummary');
+  if (!el) return;
+  const counts = allVideos.reduce((acc, v) => {
+    const q = v.qualityStatus || 'standard';
+    acc[q] = (acc[q] || 0) + 1;
+    if (!v.qualityReview) acc.unreviewed += 1;
+    return acc;
+  }, { premium: 0, standard: 0, hidden: 0, unreviewed: 0 });
+  const totalText = videoTotalCount > allVideos.length ? `${allVideos.length}/${videoTotalCount}` : String(allVideos.length);
+  el.textContent = `显示 ${visibleCount} 条｜已加载 ${totalText} 条｜优质 ${counts.premium}｜普通 ${counts.standard}｜隐藏 ${counts.hidden}｜未评估 ${counts.unreviewed}`;
 }
 
 const PLATFORM_OPTIONS = [
